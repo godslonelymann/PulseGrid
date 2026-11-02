@@ -1,0 +1,29 @@
+[
+  {
+    "message": "PulseGrid test notification",
+    "time": "2026-11-02T20:51:19.885964+00:00",
+    "event_id": "ce1ba1c2-b3fd-45db-8e52-a22ce4ad07fe"
+  },
+  {
+    "event_kind": "outage",
+    "monitor": "Fixture API",
+    "url": "http://127.0.0.1:18080/health",
+    "monitor_version_id": "15da1a77-4630-48fc-af51-2db5922e89b4",
+    "detected_at": "2026-11-02T20:52:23.673515+00:00",
+    "reason": "HTTP 503",
+    "incident_id": "6829b17d-01e0-4937-9c87-ddd5d0c116e1",
+    "link": "http://localhost:3001/?monitor=26a8d853-f0fb-451f-93db-c854e2906650",
+    "event_id": "15a70d5d-b09c-48bf-8021-b07911005822"
+  },
+  {
+    "event_kind": "recovery",
+    "monitor": "Fixture API",
+    "url": "http://127.0.0.1:18080/health",
+    "monitor_version_id": "6e79e7de-7654-418a-9bc3-2462da9be0b7",
+    "detected_at": "2026-11-02T20:52:57.428098+00:00",
+    "reason": "Successful checks",
+    "incident_id": "6829b17d-01e0-4937-9c87-ddd5d0c116e1",
+    "link": "http://localhost:3001/?monitor=26a8d853-f0fb-451f-93db-c854e2906650",
+    "event_id": "a1746a61-a029-4615-8148-1c7e99c399de"
+  }
+]

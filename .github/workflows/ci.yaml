@@ -1,0 +1,32 @@
+name: Verify PulseGrid
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {version: '0.11.4', python-version: '3.13'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: corepack enable && corepack prepare pnpm@10.32.1 --activate
+      - run: uv sync --frozen && uv run python scripts/init-env.py
+      - name: Install native PostgreSQL and Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common ca-certificates
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17 redis-server
+      - run: echo 'PG_BIN=/usr/lib/postgresql/17/bin' >> "$GITHUB_ENV"
+      - run: uv run ruff check apps/api tests/capacity scripts && uv run ruff format --check apps/api tests/capacity scripts
+      - run: bash scripts/test.sh
+      - run: pnpm --dir apps/web install --frozen-lockfile && pnpm --dir apps/web typecheck && pnpm --dir apps/web lint
+      - run: bash scripts/build-web.sh
+      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - run: bash scripts/e2e.sh
+      - name: Stop verification services
+        if: always()
+        run: uv run python scripts/native-services.py down test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: verification, path: verification/}

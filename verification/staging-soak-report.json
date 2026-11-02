@@ -1,0 +1,7 @@
+{
+  "scope": "Local production packaging with local-CA HTTPS; overlaps capacity run, no remote server/ACME claim",
+  "duration_seconds": 2035.1088412920071,
+  "samples": 204,
+  "failures": 0,
+  "p95_request_ms": 45.61324999667704
+}

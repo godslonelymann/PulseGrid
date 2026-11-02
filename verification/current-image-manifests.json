@@ -1,0 +1,22 @@
+{
+  "python:3.13-slim": {
+    "digest": "sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1",
+    "error": null
+  },
+  "node:24-alpine": {
+    "digest": "sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85",
+    "error": null
+  },
+  "postgres:17-alpine": {
+    "digest": "sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b",
+    "error": null
+  },
+  "redis:7.4-alpine": {
+    "digest": "sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+    "error": null
+  },
+  "caddy:2-alpine": {
+    "digest": "sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5",
+    "error": null
+  }
+}

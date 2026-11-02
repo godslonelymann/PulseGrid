@@ -1,0 +1,23 @@
+{
+	email {$CADDY_EMAIL}
+}
+{$CADDY_ADDRESS} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+	@api path /api/*
+	handle @api {
+		request_body {
+			max_size 16KB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

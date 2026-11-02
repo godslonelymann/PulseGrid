@@ -1,0 +1,2 @@
+{"event": "worker_started", "time": "2026-11-02T14:43:37.973292+00:00", "worker_id": "852e9184-2ec6-4ea3-8401-7a65682fa995", "concurrency": 20}
+{"event": "worker_stopped", "time": "2026-11-02T15:43:49.396499+00:00", "worker_id": "852e9184-2ec6-4ea3-8401-7a65682fa995"}

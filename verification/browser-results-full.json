@@ -1,0 +1,441 @@
+{
+  "config": {
+    "argv": [
+      "/Users/anurag./.nvm/versions/node/v24.5.0/bin/node",
+      "/Users/anurag./resume_project/pulse/apps/web/node_modules/.pnpm/@playwright+test@1.64.1/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "../../tests/e2e/playwright.config.ts"
+    ],
+    "configFile": "/Users/anurag./resume_project/pulse/tests/e2e/playwright.config.ts",
+    "rootDir": "/Users/anurag./resume_project/pulse/tests/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/anurag./resume_project/pulse/verification/browser-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/anurag./resume_project/pulse/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "*.spec.ts"
+        ],
+        "timeout": 240000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/Users/anurag./resume_project/pulse/verification/browser-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "chromium",
+        "testDir": "/Users/anurag./resume_project/pulse/tests/e2e",
+        "snapshotDir": "/Users/anurag./resume_project/pulse/tests/e2e",
+        "testIgnore": [],
+        "testMatch": "*.spec.ts",
+        "timeout": 240000,
+        "use": {
+          "baseURL": "http://localhost:3001",
+          "actionTimeout": 15000,
+          "trace": "retain-on-failure",
+          "screenshot": "only-on-failure",
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Safari/537.36",
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "screen": {
+            "width": 1920,
+            "height": 1080
+          },
+          "deviceScaleFactor": 1,
+          "isMobile": false,
+          "hasTouch": false,
+          "defaultBrowserType": "chromium"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": "chromium"
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../../verification/browser-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "configuration.spec.ts",
+      "file": "configuration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "configuration, session settings and visible dependency failures",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5381,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "buffer": "L29wdC9ob21lYnJldy9DZWxsYXIvcHl0aG9uQDMuMTMvMy4xMy4xNS9GcmFtZXdvcmtzL1B5dGhvbi5mcmFtZXdvcmsvVmVyc2lvbnMvMy4xMy9saWIvcHl0aG9uMy4xMy9nZXRwYXNzLnB5OjkwOiBHZXRQYXNzV2FybmluZzogQ2FuIG5vdCBjb250cm9sIGVjaG8gb24gdGhlIHRlcm1pbmFsLgogIHBhc3N3ZCA9IGZhbGxiYWNrX2dldHBhc3MocHJvbXB0LCBzdHJlYW0pCldhcm5pbmc6IFBhc3N3b3JkIGlucHV0IG1heSBiZSBlY2hvZWQuCk5ldyBwYXNzd29yZCAoMTIrIGNoYXJhY3RlcnMpOiAKV2FybmluZzogUGFzc3dvcmQgaW5wdXQgbWF5IGJlIGVjaG9lZC4KUmVwZWF0IHBhc3N3b3JkOiAK"
+                    },
+                    {
+                      "buffer": ""
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:28:58.614Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c9271d8ec6470e516d84-861035a1f3529e248d00",
+          "file": "configuration.spec.ts",
+          "line": 5,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "google-auth.spec.ts",
+      "file": "google-auth.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Google button starts authorization and fits desktop and mobile",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 510,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:04.227Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ca349c8f6183eda662c-6ae17a66ba8fc0bc568a",
+          "file": "google-auth.spec.ts",
+          "line": 15,
+          "column": 5
+        },
+        {
+          "title": "Google button is disabled until credentials are configured",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 328,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:04.741Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ca349c8f6183eda662c-38ec8b74ac282d0b82ea",
+          "file": "google-auth.spec.ts",
+          "line": 60,
+          "column": 5
+        },
+        {
+          "title": "Google callback errors and MFA challenges are displayed and removed from the URL",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 623,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:05.073Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ca349c8f6183eda662c-4c9874da3cc1b3adbf5d",
+          "file": "google-auth.spec.ts",
+          "line": 76,
+          "column": 5
+        },
+        {
+          "title": "Google-only account shows Google security settings",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 308,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:05.699Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3ca349c8f6183eda662c-1f684a13dcb70b51e18b",
+          "file": "google-auth.spec.ts",
+          "line": 108,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "simple-experience.spec.ts",
+      "file": "simple-experience.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "URL-only setup, advanced settings, optional groups and email alerts",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2681,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "buffer": ""
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:06.014Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "02a7338671075eccace5-8016d988e27866054edb",
+          "file": "simple-experience.spec.ts",
+          "line": 5,
+          "column": 5
+        },
+        {
+          "title": "dashboard puts problems first and distinguishes missing checks from downtime",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 550,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:08.698Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "02a7338671075eccace5-fd41163111f3301c4a85",
+          "file": "simple-experience.spec.ts",
+          "line": 164,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "workflows.spec.ts",
+      "file": "workflows.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revocation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 240000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 125138,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "buffer": "L29wdC9ob21lYnJldy9DZWxsYXIvcHl0aG9uQDMuMTMvMy4xMy4xNS9GcmFtZXdvcmtzL1B5dGhvbi5mcmFtZXdvcmsvVmVyc2lvbnMvMy4xMy9saWIvcHl0aG9uMy4xMy9nZXRwYXNzLnB5OjkwOiBHZXRQYXNzV2FybmluZzogQ2FuIG5vdCBjb250cm9sIGVjaG8gb24gdGhlIHRlcm1pbmFsLgogIHBhc3N3ZCA9IGZhbGxiYWNrX2dldHBhc3MocHJvbXB0LCBzdHJlYW0pCldhcm5pbmc6IFBhc3N3b3JkIGlucHV0IG1heSBiZSBlY2hvZWQuCk5ldyBwYXNzd29yZCAoMTIrIGNoYXJhY3RlcnMpOiAKV2FybmluZzogUGFzc3dvcmQgaW5wdXQgbWF5IGJlIGVjaG9lZC4KUmVwZWF0IHBhc3N3b3JkOiAK"
+                    },
+                    {
+                      "buffer": ""
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-02T18:29:09.256Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "26aa48cee8983222f549-3c109202ee193d451a83",
+          "file": "workflows.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-02T18:28:58.359Z",
+    "duration": 136119.081,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

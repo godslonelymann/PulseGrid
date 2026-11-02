@@ -1,0 +1,6 @@
+{
+  "metric_query_samples": 100,
+  "metric_query_median_ms": 0.3748334856936708,
+  "metric_query_p95_ms": 1.2904999894089997,
+  "retention_scope": "Batch cost measured on final capacity data with rollback; no real 30-day retention/rollup claim."
+}

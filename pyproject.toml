@@ -1,0 +1,38 @@
+[project]
+name = "pulsegrid"
+version = "0.1.0"
+description = "Self-hosted HTTP monitoring with durable scheduling and transactional alerts"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "httpcore",
+  "sqlalchemy[asyncio]",
+  "psycopg[binary,pool]",
+  "alembic",
+  "redis",
+  "argon2-cffi",
+  "pyotp",
+  "PyJWT",
+  "cryptography",
+  "pydantic-settings",
+  "email-validator",
+  "aiosmtplib",
+  "psutil",
+  "python-dotenv>=1.2.4",
+]
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+[tool.pytest.ini_options]
+pythonpath = ["apps/api"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["apps/api/tests"]
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+[tool.uv]
+package = false

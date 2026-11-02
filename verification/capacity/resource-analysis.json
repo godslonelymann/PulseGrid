@@ -1,0 +1,8 @@
+{
+  "steady_first_10_minutes_mean_rss_mib": 72.840234375,
+  "last_10_minutes_mean_rss_mib": 67.86815599173553,
+  "final_rss_mib": 67.078125,
+  "peak_at_seconds": 210.7,
+  "outbox_growth": 0,
+  "scope": "Observed one-hour resource behavior, not a multi-day leak claim"
+}

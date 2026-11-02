@@ -1,0 +1,279 @@
+{
+  "started_at": "2026-11-02T13:50:16.900917+00:00",
+  "tests": [
+    {
+      "name": "HTTP success, latency, timeout, failure and redirect",
+      "status": "PASS",
+      "detail": {
+        "up": {
+          "up": true,
+          "latency_ms": 1.2777919764630497,
+          "status_code": 200,
+          "error": null
+        },
+        "slow": {
+          "up": true,
+          "latency_ms": 253.1944589863997,
+          "status_code": 200,
+          "error": null
+        },
+        "down": {
+          "up": false,
+          "latency_ms": 5.389792000642046,
+          "status_code": 503,
+          "error": null
+        },
+        "timeout": {
+          "up": false,
+          "latency_ms": 504.8887500015553,
+          "status_code": null,
+          "error": "ReadTimeout"
+        },
+        "redirect": {
+          "up": false,
+          "latency_ms": 3.648624988272786,
+          "status_code": 302,
+          "error": null
+        }
+      },
+      "seconds": 0.813
+    },
+    {
+      "name": "Brief failure, outage, recovery and raw uptime",
+      "status": "PASS",
+      "detail": {
+        "inputs": [
+          "up",
+          "down",
+          "up",
+          "down",
+          "down",
+          "down",
+          "up",
+          "up"
+        ],
+        "states": [
+          "UP",
+          "SUSPECT",
+          "UP",
+          "SUSPECT",
+          "DOWN",
+          "DOWN",
+          "DOWN",
+          "UP"
+        ],
+        "incidents": 1,
+        "events": 2,
+        "raw_uptime_percent": 50
+      },
+      "seconds": 0.125
+    },
+    {
+      "name": "Alert retries and receiver deduplication",
+      "status": "PASS",
+      "detail": {
+        "visible_notices": 2,
+        "http_attempts": 4,
+        "delivery": "at least once, receiver deduplicates event IDs"
+      },
+      "seconds": 0.019
+    },
+    {
+      "name": "Incident history after engine recreation",
+      "status": "PASS",
+      "detail": "Incident history and delivered-message records survive a new engine instance.",
+      "seconds": 0.013
+    },
+    {
+      "name": "Two concurrent workers without duplicate checks",
+      "status": "PASS",
+      "detail": {
+        "workers": 2,
+        "monitors": 10,
+        "saved_results": 10
+      },
+      "seconds": 0.054
+    },
+    {
+      "name": "Expired lease ownership fencing",
+      "status": "PASS",
+      "detail": "An expired worker lease cannot commit after another worker takes ownership.",
+      "seconds": 0.016
+    },
+    {
+      "name": "Hard worker crash and replacement process",
+      "status": "PASS",
+      "detail": "Hard-killed a worker after claiming work; replacement resumed after the 3-second lease expired.",
+      "seconds": 3.459
+    },
+    {
+      "name": "Stale results display UNKNOWN",
+      "status": "PASS",
+      "detail": {
+        "state": "UP",
+        "displayed_state": "UNKNOWN"
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "Redis outage and fail-closed authentication",
+      "status": "PASS",
+      "detail": "Monitoring and incident creation continued from PostgreSQL; login failed closed with HTTP 503.",
+      "seconds": 2.037
+    },
+    {
+      "name": "PostgreSQL outage and restart",
+      "status": "PASS",
+      "detail": "Database stop rejected the tick; restart preserved history and a later tick succeeded. Dashboard during DB outage is not implemented.",
+      "seconds": 5.116
+    },
+    {
+      "name": "Password, MFA, replay, token rotation and revocation",
+      "status": "PASS",
+      "detail": "Password alone issues no access token; bad-code limit, concurrent MFA replay, refresh rotation, family revocation and access revocation passed.",
+      "seconds": 0.212
+    },
+    {
+      "name": "Simultaneous refresh-token reuse",
+      "status": "PASS",
+      "detail": "Two simultaneous uses yield one success, then revoke the family. Legitimate simultaneous browser refreshes would also trigger this policy.",
+      "seconds": 0.012
+    },
+    {
+      "name": "Forbidden URL destination cases",
+      "status": "PASS",
+      "detail": {
+        "blocked_cases": 12,
+        "limitation": "Preflight validation only; DNS rebinding/pinning and network egress enforcement are not implemented."
+      },
+      "seconds": 0.002
+    },
+    {
+      "name": "10 and 100 monitors with real 30-second intervals",
+      "status": "PASS",
+      "detail": [
+        {
+          "monitors": 10,
+          "rounds": 1,
+          "checks": 10,
+          "batch_seconds": [
+            0.267
+          ],
+          "oldest_due_lateness_seconds": [
+            0.009
+          ],
+          "combined_runner_and_http_fixture_rss_mib": [
+            180.1
+          ],
+          "combined_process_cpu_seconds": 0.018,
+          "average_cpu_percent_one_core": 6.72,
+          "wall_seconds": 0.269,
+          "http_error_count": 0
+        },
+        {
+          "monitors": 100,
+          "rounds": 3,
+          "checks": 300,
+          "batch_seconds": [
+            0.32,
+            0.358,
+            0.363
+          ],
+          "oldest_due_lateness_seconds": [
+            0.112,
+            0.339,
+            0.332
+          ],
+          "combined_runner_and_http_fixture_rss_mib": [
+            181.5,
+            68.5,
+            68.9
+          ],
+          "combined_process_cpu_seconds": 0.549,
+          "average_cpu_percent_one_core": 0.9,
+          "wall_seconds": 61.118,
+          "http_error_count": 0
+        }
+      ],
+      "seconds": 61.534
+    },
+    {
+      "name": "100,000-row storage sample",
+      "status": "PASS",
+      "detail": {
+        "sample_rows": 100000,
+        "table_and_indexes_bytes": 18071552,
+        "incremental_bytes_per_ping": 180.47,
+        "projected_checks_per_day_100_monitors_30s": 288000,
+        "projected_mib_per_day": 49.57,
+        "projected_gib_30_days": 1.45,
+        "excludes": "WAL, backups, incidents, outbox, long error text, database overhead outside this relation"
+      },
+      "seconds": 0.653
+    }
+  ],
+  "measurements": {
+    "capacity": [
+      {
+        "monitors": 10,
+        "rounds": 1,
+        "checks": 10,
+        "batch_seconds": [
+          0.267
+        ],
+        "oldest_due_lateness_seconds": [
+          0.009
+        ],
+        "combined_runner_and_http_fixture_rss_mib": [
+          180.1
+        ],
+        "combined_process_cpu_seconds": 0.018,
+        "average_cpu_percent_one_core": 6.72,
+        "wall_seconds": 0.269,
+        "http_error_count": 0
+      },
+      {
+        "monitors": 100,
+        "rounds": 3,
+        "checks": 300,
+        "batch_seconds": [
+          0.32,
+          0.358,
+          0.363
+        ],
+        "oldest_due_lateness_seconds": [
+          0.112,
+          0.339,
+          0.332
+        ],
+        "combined_runner_and_http_fixture_rss_mib": [
+          181.5,
+          68.5,
+          68.9
+        ],
+        "combined_process_cpu_seconds": 0.549,
+        "average_cpu_percent_one_core": 0.9,
+        "wall_seconds": 61.118,
+        "http_error_count": 0
+      }
+    ],
+    "storage": {
+      "sample_rows": 100000,
+      "table_and_indexes_bytes": 18071552,
+      "incremental_bytes_per_ping": 180.47,
+      "projected_checks_per_day_100_monitors_30s": 288000,
+      "projected_mib_per_day": 49.57,
+      "projected_gib_30_days": 1.45,
+      "excludes": "WAL, backups, incidents, outbox, long error text, database overhead outside this relation"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.7.1-arm64-arm-64bit-Mach-O",
+    "python": "3.13.15",
+    "logical_cpus": 10,
+    "host_ram_gib": 16.0,
+    "postgres_version": "17.11",
+    "redis_version": "7.4.12"
+  },
+  "finished_at": "2026-11-02T13:51:31.654869+00:00"
+}

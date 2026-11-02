@@ -1,0 +1,174 @@
+{
+  "started_at": "2026-11-02T13:47:42.154312+00:00",
+  "tests": [
+    {
+      "name": "HTTP success, latency, timeout, failure and redirect",
+      "status": "PASS",
+      "detail": {
+        "up": {
+          "up": true,
+          "latency_ms": 1.548750005895272,
+          "status_code": 200,
+          "error": null
+        },
+        "slow": {
+          "up": true,
+          "latency_ms": 254.3176670151297,
+          "status_code": 200,
+          "error": null
+        },
+        "down": {
+          "up": false,
+          "latency_ms": 2.8979589988011867,
+          "status_code": 503,
+          "error": null
+        },
+        "timeout": {
+          "up": false,
+          "latency_ms": 502.97516700811684,
+          "status_code": null,
+          "error": "ReadTimeout"
+        },
+        "redirect": {
+          "up": false,
+          "latency_ms": 3.9229579851962626,
+          "status_code": 302,
+          "error": null
+        }
+      },
+      "seconds": 0.802
+    },
+    {
+      "name": "Brief failure, outage, recovery and raw uptime",
+      "status": "PASS",
+      "detail": {
+        "inputs": [
+          "up",
+          "down",
+          "up",
+          "down",
+          "down",
+          "down",
+          "up",
+          "up"
+        ],
+        "states": [
+          "UP",
+          "SUSPECT",
+          "UP",
+          "SUSPECT",
+          "DOWN",
+          "DOWN",
+          "DOWN",
+          "UP"
+        ],
+        "incidents": 1,
+        "events": 2,
+        "raw_uptime_percent": 50
+      },
+      "seconds": 0.108
+    },
+    {
+      "name": "Alert retries and receiver deduplication",
+      "status": "PASS",
+      "detail": {
+        "visible_notices": 2,
+        "http_attempts": 4,
+        "delivery": "at least once, receiver deduplicates event IDs"
+      },
+      "seconds": 0.018
+    },
+    {
+      "name": "Incident history after engine recreation",
+      "status": "PASS",
+      "detail": "Incident history and delivered-message records survive a new engine instance.",
+      "seconds": 0.02
+    },
+    {
+      "name": "Two concurrent workers without duplicate checks",
+      "status": "PASS",
+      "detail": {
+        "workers": 2,
+        "monitors": 10,
+        "saved_results": 10
+      },
+      "seconds": 0.044
+    },
+    {
+      "name": "Expired lease ownership fencing",
+      "status": "PASS",
+      "detail": "An expired worker lease cannot commit after another worker takes ownership.",
+      "seconds": 0.012
+    },
+    {
+      "name": "Hard worker crash and replacement process",
+      "status": "PASS",
+      "detail": "Hard-killed a worker after claiming work; replacement resumed after the 3-second lease expired.",
+      "seconds": 3.462
+    },
+    {
+      "name": "Stale results display UNKNOWN",
+      "status": "PASS",
+      "detail": {
+        "state": "UP",
+        "displayed_state": "UNKNOWN"
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "Redis outage and fail-closed authentication",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 850, in connect_check_health\n    await self._connect()\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 1487, in _connect\n    reader, writer = await asyncio.open_connection(\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        **self._connection_arguments()\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/streams.py\", line 48, in open_connection\n    transport, _ = await loop.create_connection(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        lambda: protocol, host, port, **kwds)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py\", line 1172, in create_connection\n    raise exceptions[0]\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py\", line 1147, in create_connection\n    sock = await self._connect_sock(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n        exceptions, addrinfo, laddr_infos)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py\", line 1046, in _connect_sock\n    await self.sock_connect(sock, address)\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py\", line 643, in sock_connect\n    return await fut\n           ^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/selector_events.py\", line 683, in _sock_connect_cb\n    raise OSError(err, f'Connect call failed {address}')\nConnectionRefusedError: [Errno 61] Connect call failed ('127.0.0.1', 56606)\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 216, in redis_outage\n    assert await engine.redis.ping()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/client.py\", line 929, in execute_command\n    conn = self.connection or await pool.get_connection()\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/utils.py\", line 249, in async_wrapper\n    return await func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 2824, in get_connection\n    await self.ensure_connection(connection)\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 2865, in ensure_connection\n    await connection.connect()\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 819, in connect\n    await self.retry.call_with_retry(\n    ...<7 lines>...\n    )\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/retry.py\", line 81, in call_with_retry\n    raise error\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/retry.py\", line 69, in call_with_retry\n    return await do()\n           ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/redis/asyncio/connection.py\", line 876, in connect_check_health\n    raise e\nredis.exceptions.ConnectionError: Error 61 connecting to 127.0.0.1:56606. Connect call failed ('127.0.0.1', 56606).\n",
+      "seconds": 2.076
+    },
+    {
+      "name": "PostgreSQL outage and restart",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 238, in postgres_outage\n    await wait_until(ready,15)\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 52, in wait_until\n    raise AssertionError(f'Condition did not become true within {timeout}s; last error: {last}')\nAssertionError: Condition did not become true within 15s; last error: couldn't get a connection after 2.00 sec\n",
+      "seconds": 17.115
+    },
+    {
+      "name": "Password, MFA, replay, token rotation and revocation",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 249, in auth\n    assert 'mfa_ticket' in login and 'access_token' not in login\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+      "seconds": 0.086
+    },
+    {
+      "name": "Simultaneous refresh-token reuse",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 274, in refresh_race\n    family, token = await engine.new_family()\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/core.py\", line 161, in new_family\n    async with self.pool.connection() as c:\n               ~~~~~~~~~~~~~~~~~~~~^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py\", line 214, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 220, in connection\n    conn = await self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 255, in getconn\n    raise PoolTimeout(\n        f\"couldn't get a connection after {timeout:.2f} sec\"\n    ) from None\npsycopg_pool.PoolTimeout: couldn't get a connection after 2.00 sec\n",
+      "seconds": 2.006
+    },
+    {
+      "name": "Forbidden URL destination cases",
+      "status": "PASS",
+      "detail": {
+        "blocked_cases": 12,
+        "limitation": "Preflight validation only; DNS rebinding/pinning and network egress enforcement are not implemented."
+      },
+      "seconds": 0.007
+    },
+    {
+      "name": "10 and 100 monitors with real 30-second intervals",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 298, in capacity\n    await reset()\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 56, in reset\n    await engine.sql('TRUNCATE outbox,incidents,pings,monitors RESTART IDENTITY CASCADE')\n  File \"/Users/anurag./resume_project/pulse/feasibility/core.py\", line 67, in sql\n    async with self.pool.connection() as c:\n               ~~~~~~~~~~~~~~~~~~~~^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py\", line 214, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 220, in connection\n    conn = await self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 255, in getconn\n    raise PoolTimeout(\n        f\"couldn't get a connection after {timeout:.2f} sec\"\n    ) from None\npsycopg_pool.PoolTimeout: couldn't get a connection after 2.00 sec\n",
+      "seconds": 2.003
+    },
+    {
+      "name": "100,000-row storage sample",
+      "status": "FAIL",
+      "error": "Traceback (most recent call last):\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 62, in check\n    detail = await fn()\n             ^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 338, in storage\n    await reset()\n  File \"/Users/anurag./resume_project/pulse/feasibility/run.py\", line 56, in reset\n    await engine.sql('TRUNCATE outbox,incidents,pings,monitors RESTART IDENTITY CASCADE')\n  File \"/Users/anurag./resume_project/pulse/feasibility/core.py\", line 67, in sql\n    async with self.pool.connection() as c:\n               ~~~~~~~~~~~~~~~~~~~~^^\n  File \"/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py\", line 214, in __aenter__\n    return await anext(self.gen)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 220, in connection\n    conn = await self.getconn(timeout=timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/anurag./resume_project/pulse/.venv/lib/python3.13/site-packages/psycopg_pool/pool_async.py\", line 255, in getconn\n    raise PoolTimeout(\n        f\"couldn't get a connection after {timeout:.2f} sec\"\n    ) from None\npsycopg_pool.PoolTimeout: couldn't get a connection after 2.00 sec\n",
+      "seconds": 2.004
+    }
+  ],
+  "measurements": {},
+  "environment": {
+    "platform": "macOS-26.7.1-arm64-arm-64bit-Mach-O",
+    "python": "3.13.15",
+    "logical_cpus": 10,
+    "host_ram_gib": 16.0,
+    "postgres_version": "17.11",
+    "redis_version": "7.4.12"
+  },
+  "finished_at": "2026-11-02T13:48:13.432706+00:00"
+}

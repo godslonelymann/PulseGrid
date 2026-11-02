@@ -1,0 +1,24 @@
+[Unit]
+Description=PulseGrid monitoring worker
+After=network.target
+
+[Service]
+Type=simple
+User=pulsegrid
+Group=pulsegrid
+WorkingDirectory=/opt/pulsegrid
+Environment=ENV_FILE=/etc/pulsegrid/pulsegrid.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/pulsegrid/.venv/bin/python scripts/run-env.py /opt/pulsegrid/.venv/bin/python -m pulsegrid.worker.runner
+Restart=always
+RestartSec=5
+TimeoutStopSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryMax=512M
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

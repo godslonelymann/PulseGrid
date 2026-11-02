@@ -1,0 +1,25 @@
+[Unit]
+Description=PulseGrid dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=pulsegrid
+Group=pulsegrid
+WorkingDirectory=/opt/pulsegrid/apps/web
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/env node .next/standalone/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/pulsegrid/apps/web/.next/standalone/.next
+MemoryMax=512M
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target
