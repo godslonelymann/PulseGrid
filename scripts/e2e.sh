@@ -10,7 +10,7 @@ export REDIS_URL=redis://localhost:56380/0
 export PUBLIC_ORIGIN=http://localhost:3001
 export PRIVATE_TARGET_ALLOWLIST=127.0.0.1:18080
 export ACCESS_SECONDS=8
-# API fixtures use legacy credentials; the browser sign-in screen remains Google only.
+# API fixtures use operator-provisioned credentials without confirmed email.
 export ENABLE_LEGACY_PASSWORD_AUTH=true
 # Browser fixtures must not use the operator's configured mail provider.
 export SMTP_HOST= SMTP_USER= SMTP_PASSWORD= SMTP_FROM=

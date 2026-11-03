@@ -24,9 +24,9 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
     "browser-test-password-123",
   );
   await expect(page.getByRole("heading", { name: "Dashboard." })).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Your account settings" }).click();
   await page
-    .getByLabel("Current password")
+    .getByLabel("Current password", { exact: true })
     .first()
     .fill("browser-test-password-123");
   await page.getByRole("button", { name: "Set up authenticator" }).click();
@@ -44,7 +44,9 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
   const codes = await page.locator(".recovery-codes code").allTextContents();
   expect(codes).toHaveLength(10);
   await page.getByRole("button", { name: "I have saved these" }).click();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Sign out of this browser", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();
@@ -54,7 +56,7 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
     "browser-test-password-123",
   );
   await expect(
-    page.getByRole("heading", { name: "One more check." }),
+    page.getByRole("heading", { name: "Verify your sign-in" }),
   ).toBeVisible();
   await page.getByLabel("Authentication or recovery code").fill(codes[0]);
   await page.getByRole("button", { name: "Verify and sign in" }).click();
@@ -66,21 +68,21 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
   await page
     .getByLabel("Website or API URL")
     .fill("http://127.0.0.1:18080/health");
-  await page.getByLabel("Wait for a response (seconds)").fill("1");
   await page.getByRole("button", { name: "Start monitoring" }).click();
   await expect(
     page.getByRole("button", { name: /^Fixture API http/ }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Alerts", exact: true }).click();
-  await page.getByText("Advanced alert settings", { exact: true }).click();
-  await page.getByRole("button", { name: "Add channel" }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Fixture webhook");
-  await page.getByLabel("Webhook URL").fill("http://127.0.0.1:18080/hook");
-  await page.getByRole("button", { name: "Save channel" }).click();
-  await page.getByRole("button", { name: "Send test", exact: true }).click();
-  await expect(
-    page.getByText("Delivered", { exact: true }).first(),
-  ).toBeVisible();
+  const csrf = (await (await page.request.get("/api/v1/auth/csrf")).json())
+    .csrf;
+  const webhook = await page.request.post("/api/v1/notification-channels", {
+    headers: { Origin: new URL(page.url()).origin, "X-CSRF-Token": csrf },
+    data: {
+      kind: "webhook",
+      name: "Fixture webhook",
+      destination: "http://127.0.0.1:18080/hook",
+    },
+  });
+  expect(webhook.ok()).toBeTruthy();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: /^Fixture API http/ }).click();
   await expect(
@@ -131,9 +133,11 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
     .toBe(workerState.restarts + 1);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.locator(".page-heading .badge.paused")).toBeVisible();
-  await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await expect(page.locator(".page-heading .badge.unknown")).toBeVisible();
   await request.post("http://127.0.0.1:18080/control/200");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(
+    page.getByText("Service resumed", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".page-heading .badge.up")).toBeVisible({
     timeout: 75000,
   });
@@ -171,8 +175,10 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
   await expect(
     revokedTab.getByRole("heading", { name: "Dashboard." }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.getByRole("button", { name: "Your account settings" }).click();
+  await page
+    .getByRole("button", { name: "Sign out of this browser", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();

@@ -15,6 +15,8 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pulsegrid.api.email_alerts import email_channels, new_email_channel
+from pulsegrid.api.email_auth import router as email_auth_router
 from pulsegrid.api.google import router as google_router
 from pulsegrid.api.schemas import (
     ActionOut,
@@ -26,6 +28,7 @@ from pulsegrid.api.schemas import (
     Credentials,
     DashboardOut,
     DeliveryOut,
+    EmailAlertPreference,
     EnrollmentOut,
     ErrorOut,
     Factor,
@@ -49,8 +52,9 @@ from pulsegrid.auth.security import (
     decrypt,
     digest,
     encrypt,
-    hasher,
+    hash_password,
     issue,
+    password_enabled,
     password_ok,
     principal,
     rate,
@@ -78,7 +82,7 @@ from pulsegrid.storage.models import Result as Check
 from pulsegrid.worker.probe import UnsafeURL, resolve, validate_url
 
 app = FastAPI(
-    description="Monitoring API with Google sign-up and sign-in. Protected routes require HttpOnly session cookies. Mutations require an exact Origin and matching X-CSRF-Token/cookie. Unknown and foreign resources both return 404. History uses bounded limit/offset pagination; interval/timeout bounds are described in input schemas. Latency is time to headers; metric windows are clipped to retention.",
+    description="Monitoring API with email and Google sign-up and sign-in. Protected routes require HttpOnly session cookies. Mutations require an exact Origin and matching X-CSRF-Token/cookie. Unknown and foreign resources both return 404. History uses bounded limit/offset pagination; interval/timeout bounds are described in input schemas. Latency is time to headers; metric windows are clipped to retention.",
     responses={
         401: {"model": ErrorOut, "description": "Missing, expired, revoked, or invalid authentication/factor"},
         403: {"model": ErrorOut, "description": "Origin or CSRF rejected"},
@@ -94,6 +98,7 @@ app = FastAPI(
 )
 P = "/api/v1"
 MONITOR_LIMIT = 20
+app.include_router(email_auth_router, prefix=P + "/auth/email", tags=["Email authentication"])
 app.include_router(google_router, prefix=P + "/auth/google", tags=["Google authentication"])
 
 
@@ -164,13 +169,13 @@ async def get_csrf(response: Response):
 
 @app.post(P + "/auth/login", response_model=LoginOut, response_model_exclude_none=True)
 async def login(data: Credentials, request: Request, response: Response, session: AsyncSession = Depends(db)):
-    if not cfg.enable_legacy_password_auth:
-        raise HTTPException(403, "Password sign-in is disabled; continue with Google")
     await rate(f"ip:{request.client.host}", 30)
     await rate(f"login:{digest(data.email.lower())}", 10)
     user = await session.scalar(select(User).where(User.email == data.email.lower()))
     if not await password_ok(data.password, user.password_hash if user else DUMMY_HASH) or not user:
         raise HTTPException(401, "Invalid email or password")
+    if not password_enabled(user):
+        raise HTTPException(403, "Password sign-in is disabled for this legacy account")
     verified_hash = user.password_hash
     await session.refresh(user, with_for_update=True)
     if user.password_hash != verified_hash:
@@ -203,6 +208,8 @@ async def mfa_login(data: Factor, request: Request, response: Response, session:
     # Both recovery consumption and session creation roll back if another request wins.
     if not await redis.getdel(key):
         raise HTTPException(401, "Challenge already consumed")
+    if user.google_sub and not await email_channels(session, user.id):
+        session.add(new_email_channel(user))
     await issue(session, response, user, label=request.headers.get("user-agent", "Browser"))
     audit(session, user, "mfa_login")
     await session.commit()
@@ -240,7 +247,7 @@ async def me(auth=Depends(principal)):
         "id": user.id,
         "email": user.email,
         "mfa_enabled": bool(user.totp_secret),
-        "password_enabled": cfg.enable_legacy_password_auth and bool(user.password_hash),
+        "password_enabled": password_enabled(user),
         "google_connected": bool(user.google_sub),
         "session_id": family.id,
     }
@@ -297,11 +304,9 @@ async def logout(request: Request, response: Response, auth=Depends(principal), 
 
 @app.post(P + "/auth/password", response_model=ActionOut, response_model_exclude_none=True)
 async def password_change(data: PasswordChange, auth=Depends(principal), session: AsyncSession = Depends(db)):
-    user = await session.scalar(select(User).where(User.id == auth[0].id).with_for_update())
+    user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
     await reauthenticate(session, user, data.password, data.code)
-    import asyncio
-
-    user.password_hash = await asyncio.to_thread(hasher.hash, data.new_password)
+    user.password_hash = await hash_password(data.new_password)
     await session.execute(update(LoginSession).where(LoginSession.user_id == user.id).values(revoked_at=now()))
     audit(session, user, "password_changed")
     await session.commit()
@@ -321,14 +326,14 @@ async def enroll(data: Reauth, auth=Depends(principal), session: AsyncSession = 
 
 @app.post(P + "/auth/mfa/confirm", response_model=CodesOut)
 async def confirm(data: ConfirmMFA, auth=Depends(principal), session: AsyncSession = Depends(db)):
-    if not cfg.enable_legacy_password_auth:
-        raise HTTPException(403, "Manage account security through Google")
+    if not password_enabled(auth[0]):
+        raise HTTPException(403, "Password sign-in is unavailable")
     await rate(f"enroll-attempt:{auth[1].id}", 5)
     secret = await redis.get(f"enroll:{auth[1].id}")
     if not secret or not pyotp.TOTP(decrypt(secret)).verify(data.code, valid_window=0):
         raise HTTPException(401, "Invalid or expired enrollment")
-    user = await session.scalar(select(User).where(User.id == auth[0].id).with_for_update())
-    if user.totp_secret or not await redis.getdel(f"enroll:{auth[1].id}"):
+    user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
+    if not password_enabled(user) or user.totp_secret or not await redis.getdel(f"enroll:{auth[1].id}"):
         raise HTTPException(409, "Enrollment already used")
     user.totp_secret = secret
     user.last_totp_step = int(now().timestamp()) // 30
@@ -348,7 +353,7 @@ async def confirm(data: ConfirmMFA, auth=Depends(principal), session: AsyncSessi
 @app.post(P + "/auth/mfa/disable", response_model=ActionOut | CodesOut, response_model_exclude_none=True)
 @app.post(P + "/auth/mfa/recovery-codes", response_model=ActionOut | CodesOut, response_model_exclude_none=True)
 async def manage_mfa(data: Reauth, request: Request, auth=Depends(principal), session: AsyncSession = Depends(db)):
-    user = await session.scalar(select(User).where(User.id == auth[0].id).with_for_update())
+    user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
     if not user.totp_secret:
         raise HTTPException(409, "MFA is not enabled")
     await reauthenticate(session, user, data.password, data.code)
@@ -740,8 +745,31 @@ def channel_json(c, account_email):
 
 
 @app.get(P + "/notification-settings")
-async def notification_settings(auth=Depends(principal)):
-    return {"email_available": bool(cfg.smtp_host and cfg.smtp_from)}
+async def notification_settings(auth=Depends(principal), session: AsyncSession = Depends(db)):
+    channels = await email_channels(session, auth[0].id)
+    enabled = next((channel for channel in channels if channel.enabled), None)
+    return {
+        "email_available": bool(cfg.smtp_host and cfg.smtp_from),
+        "email_enabled": enabled is not None,
+        "email_channel_id": enabled.id if enabled else None,
+    }
+
+
+@app.put(P + "/notification-settings")
+async def set_email_alerts(data: EmailAlertPreference, auth=Depends(principal), session: AsyncSession = Depends(db)):
+    user = auth[0]
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    channels = await email_channels(session, user.id)
+    if channels:
+        # All email channels use the same account address. Keep a single enabled channel.
+        primary = next((channel for channel in channels if channel.enabled), channels[0])
+        for channel in channels:
+            channel.enabled = data.enabled and channel.id == primary.id
+    else:
+        session.add(new_email_channel(user, enabled=data.enabled))
+    audit(session, user, "email_alert_preference_updated")
+    await session.commit()
+    return {"ok": True}
 
 
 @app.get(P + "/notification-channels", response_model=list[ChannelOut])
@@ -813,6 +841,7 @@ async def deliveries(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     event_kind: Literal["outage", "recovery", "test"] | None = None,
+    channel_kind: Literal["email", "webhook"] | None = None,
     failed: bool = False,
     auth=Depends(principal),
     session: AsyncSession = Depends(db),
@@ -820,6 +849,8 @@ async def deliveries(
     query = select(Outbox).join(Channel).where(Channel.owner_id == auth[0].id)
     if event_kind is not None:
         query = query.where(Outbox.event_kind == event_kind)
+    if channel_kind is not None:
+        query = query.where(Channel.kind == channel_kind)
     if failed:
         query = query.where(Outbox.delivered_at.is_(None), Outbox.last_error.is_not(None))
     # A retry changes next_attempt. Use the original queue time for latest-test lookup.

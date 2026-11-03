@@ -16,7 +16,7 @@ uv run alembic -c apps/api/alembic.ini upgrade head
 bash scripts/dev.sh
 ```
 
-Configure Google credentials as described below, then open **http://localhost:3000**. **Continue with Google** creates your account on the first visit and signs you in on later visits. No email/password form or default account exists. Choose **Add service** on the Dashboard and paste a public website or API URL; its name is filled in automatically. Development data persists across restarts.
+Open **http://localhost:3000** and choose **Continue with Google** or **Create account**. Configure Google OAuth for Google sign-in and SMTP for email signup and recovery. Choose **Add service** on the Dashboard and paste a public website or API URL; its name is filled in automatically. Development data persists across restarts.
 
 ## Google sign-up and sign-in
 
@@ -32,22 +32,27 @@ PUBLIC_ORIGIN=http://localhost:3000
 
 Register **`http://localhost:3000/api/v1/auth/google/callback`** as an authorized redirect URI. In production, replace `http://localhost:3000` with the exact HTTPS `PUBLIC_ORIGIN`. The callback is derived from `PUBLIC_ORIGIN`; no frontend secret or extra redirect variable is required.
 
-Run `uv run alembic -c apps/api/alembic.ini upgrade head`, then restart the API (or restart `bash scripts/dev.sh`). **Continue with Google** creates a new account on first use and signs in on later visits. No bootstrap command is needed. Leaving either Google field blank disables the Google button; configure both before using the app. Password sign-in is disabled by default, including API requests.
+Run `uv run alembic -c apps/api/alembic.ini upgrade head`, then restart the API (or restart `bash scripts/dev.sh`). **Continue with Google** creates a new account on first use and signs in on later visits. No bootstrap command is needed. Leaving either Google field blank disables the Google button.
 
-Google identities are matched by Google's stable account ID. An existing password account with the same email requires a one-time, 15-minute operator approval through `pulsegrid.manage allow-google-link EMAIL`; the next verified Google sign-in converts that account without losing monitors/history. There is no automatic email-based merging. Google accounts manage their password and two-step verification at Google. Existing PulseGrid MFA remains required for converted accounts that already had it enabled. Only `openid email` access is requested; Google access/refresh tokens are not stored.
+Google identities are matched by Google's stable account ID. Operator-approved conversion remains available for older accounts with password sign-in disabled. PulseGrid requests `openid email` and stores the Google account ID.
+
+## Email sign-up and password recovery
+
+Configure `SMTP_HOST` and `SMTP_FROM` with the other SMTP settings in the [operator runbook](docs/OPERATIONS.md#configuration). **Create account** sends a confirmation link that expires in an hour. Open it to choose a password of at least 12 characters, then **Log in**. **Forgot password?** sends a reset link that expires in 30 minutes. A successful reset ends every PulseGrid session on that account and keeps any enrolled MFA.
+
+To add a password to a Google account, use **Settings → Account & security → Add a password**. Verify with the connected Google account, then open the email link in the same signed-in browser. PulseGrid asks for an authentication or recovery code if local MFA is enabled.
 
 For the existing shared EC2 installation, see [pulling, deploying and converting the current account](docs/EC2_UPDATES.md). A Git pull alone does not rebuild or restart the running app in `/opt/pulsegrid`.
 
 ## Included workflows
 
-Google sign-up and returning sign-in; Google account security settings; operator-approved conversion of existing password accounts; retained legacy MFA challenges; session revocation; HTTP GET/HEAD services; editing, pause/resume and confirmed history deletion; current/unknown/paused health; check-based uptime and coverage; time-to-headers charts, percentiles and histograms; persistent incidents; encrypted email/webhook destinations; saved alert coverage; delivery tests, retries and failure history.
+Email and Google sign-up and returning sign-in; password recovery; account linking; MFA challenges; session revocation; HTTP GET/HEAD services; editing, pause/resume and confirmed history deletion; current/unknown/paused health; check-based uptime and coverage; time-to-headers charts, percentiles and histograms; persistent incidents; encrypted email/webhook destinations; saved alert coverage; delivery tests, retries and failure history.
 
 ## Everyday use
 
-- **Dashboard:** see all services together, with problems first. Use **Add service** with only a URL and optional name. HTTP method, response codes, check frequency and timeout live in **Advanced settings**.
+- **Dashboard:** see all services together, with problems first. Use **Add service** with a URL and optional name. Use **Advanced settings** to change the check frequency.
 - **Services:** all services appear in one list. There is no group setup, filter or management. Services belong directly to your account. Enabled alert destinations cover all your services. Archive services to retain their history without continuing checks.
-- **Alerts:** enable email alerts for outages and recoveries across all current and future services. Alerts automatically go to the email address you signed up with. The configured SMTP account is only the sender. **Send test email** is available once server email delivery is configured. If SMTP is missing, the screen says so; enabling alerts alone does not set up delivery.
-- **Advanced alerts:** webhooks, additional destinations and delivery history remain in **Advanced alert settings**. New destinations cover all services; existing destinations keep their saved coverage and can be expanded to all services when edited.
+- **Settings:** Outage and recovery emails are on by default for Google and confirmed email signups. Turn them off in **Email alerts**, or use **Send test email** to check delivery and see the latest result. Sending mail requires SMTP configuration on the server.
 - **Service details:** current status, uptime, response-time chart and recent outages appear first. **More details** contains coverage, percentiles, the histogram and individual checks. **No recent checks** always remains separate from **Down**.
 - **Settings:** account security and session management.
 
@@ -79,3 +84,7 @@ bash scripts/e2e.sh
 The fault suite intentionally stops **only** the dedicated `pulsegrid-verification` native PostgreSQL/Redis processes. The browser suite resets only `pulsegrid_test`; run it after pytest, not concurrently. Capacity uses its own database and runs for a real hour; see the verification guide for the exact command and saved measurements. Public deployment, external heartbeat, provider credentials and remote staging validation require an operator-supplied server/services.
 
 Stop local dependencies with `uv run python scripts/native-services.py down dev`; database data is retained. Build the native production frontend with `bash scripts/build-web.sh`.
+
+## UI credits
+
+The authenticator input adapts the OTP Input from [Rare UI](https://rareui.com). See the [Rare UI license](docs/RARE_UI_LICENSE.txt).

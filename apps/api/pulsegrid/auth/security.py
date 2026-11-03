@@ -39,6 +39,15 @@ def decrypt(value: str):
     return Fernet(cfg.encryption_key.encode()).decrypt(value.encode()).decode()
 
 
+def password_enabled(user):
+    return bool(user.password_hash and (user.email_verified_at or cfg.enable_legacy_password_auth))
+
+
+async def hash_password(password):
+    async with password_slots:
+        return await asyncio.to_thread(hasher.hash, password)
+
+
 async def password_ok(password, encoded):
     async with password_slots:
         try:
@@ -153,12 +162,12 @@ async def verify_factor(session, user, code):
     return used.scalar_one_or_none() is not None
 
 
-async def reauthenticate(session, user, password, code):
-    if not cfg.enable_legacy_password_auth:
-        raise HTTPException(403, "Manage account security through Google")
+async def reauthenticate(session, user, password, code, *, failure_status=401):
+    if user.password_hash and not password_enabled(user):
+        raise HTTPException(403, "Password sign-in is disabled for this legacy account")
     await rate(f"reauth:{user.id}")
     if not await password_ok(password, user.password_hash) or not await verify_factor(session, user, code):
-        raise HTTPException(401, "Reauthentication failed")
+        raise HTTPException(failure_status, "Reauthentication failed")
 
 
 async def recovery_codes(session, user):

@@ -65,8 +65,7 @@ asyncio.run(main())
     page.getByRole("heading", { name: "Configuration history" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", {
-      name: "http://127.0.0.1:18080/health",
+    page.getByText("http://127.0.0.1:18080/health", {
       exact: true,
     }),
   ).toBeVisible();
@@ -78,12 +77,17 @@ asyncio.run(main())
       (version: { id: string }) => version.id === original.monitor_version_id,
     ).url,
   ).toBe("http://127.0.0.1:18080/health");
-  await page
-    .getByRole("button", { name: "Archive service", exact: true })
-    .click();
+  const archive = page.getByRole("button", {
+    name: "Archive service",
+    exact: true,
+  });
+  const remove = page.getByRole("button", { name: "Delete", exact: true });
+  await expect(archive).toHaveCSS("width", "200px");
+  await expect(remove).toHaveCSS("width", "200px");
+  await archive.click();
   await expect(
     page.getByRole("button", { name: "Restore service", exact: true }),
-  ).toBeVisible();
+  ).toHaveCSS("width", "200px");
   expect(
     (await (await page.request.get("/api/v1/dashboard")).json()).monitors,
   ).toHaveLength(0);
@@ -94,9 +98,7 @@ asyncio.run(main())
     retained.some((check: { id: string }) => check.id === original.id),
   ).toBeTruthy();
   await page.getByRole("button", { name: "Back to dashboard" }).click();
-  await page
-    .getByRole("button", { name: "Show archived services", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Archived", exact: true }).click();
   await page.getByRole("button", { name: /^Versioned service http/ }).click();
   await page
     .getByRole("button", { name: "Restore service", exact: true })

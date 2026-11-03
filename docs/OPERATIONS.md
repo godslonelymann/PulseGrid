@@ -14,7 +14,7 @@ uv run alembic -c apps/api/alembic.ini upgrade head
 bash scripts/dev.sh
 ```
 
-Open **http://localhost:3000** after configuring Google credentials as described in the README. Continue with Google creates the account; do not bootstrap a password account. The development script starts PostgreSQL/Redis, applies migrations, and runs the API, worker and frontend. Ctrl-C stops the application processes and retains the database. Stop dependencies separately with `uv run python scripts/native-services.py down dev`.
+Open **http://localhost:3000** after configuring Google OAuth or SMTP as described in the README. The development script starts PostgreSQL/Redis, applies migrations, and runs the API, worker and frontend. Ctrl-C stops the application processes and retains the database. Stop dependencies separately with `uv run python scripts/native-services.py down dev`.
 
 The helper manages only its own loopback services under ignored `.local-services/PROFILE/`. It refuses occupied ports, retains database files on shutdown, and uses PostgreSQL password authentication for TCP connections. These development profiles have known local passwords and must never serve public production traffic. Never delete a profile directory containing valuable data. Run the helper as a non-root user; `initdb` refuses root.
 
@@ -48,14 +48,14 @@ API OpenAPI: http://127.0.0.1:8000/api/docs . Browser requests use the Next.js d
 | `REDIS_URL` | Development uses `redis://localhost:56379/0`. Production uses a dedicated local/private Redis database. Restore flushes the selected database, so never share it with another application. |
 | `JWT_SECRET` / `ENCRYPTION_KEY` | Random signing secret (32+ characters) / Fernet key; no defaults. Rotating signing keys signs out browsers. Changing encryption keys without re-encryption makes existing secrets unreadable. |
 | `ENVIRONMENT`, `SECURE_COOKIES`, `PUBLIC_ORIGIN` | Production requires HTTPS and Secure cookies. Origin must exactly match the browser URL, including nondefault ports. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Required Google OAuth Web application credentials. Register `PUBLIC_ORIGIN/api/v1/auth/google/callback` exactly. Restart the API after changes. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth Web application credentials for Google sign-in. Register `PUBLIC_ORIGIN/api/v1/auth/google/callback` exactly. Restart the API after changes. |
 | `CADDY_ADDRESS`, `CADDY_EMAIL` | Public domain/IP and certificate contact. Configure these for Caddy separately from application secrets. |
 | `PRIVATE_TARGET_ALLOWLIST` | Empty by default. Comma-separated exact hostname:port entries for trusted targets only. |
 | `WORKER_CONCURRENCY`, `LEASE_SECONDS` | Default 20 and 60 seconds. Renewal covers queue time. Tune after measuring. |
 | `WORKER_HEARTBEAT_URL` | Optional secret HTTPS ping URL for the external worker check. The worker sends a GET about once a minute. |
 | `ACCESS_SECONDS`, `SESSION_DAYS` | Default five-minute access cookies and 14-day session expiry. |
 | `RAW_RETENTION_DAYS`, `SECURITY_RETENTION_DAYS`, `INCIDENT_RETENTION_DAYS` | Default 30 / 90 / 365. Open incidents are retained. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | SMTP provider configuration. Default STARTTLS on port 587 with certificate verification. Missing configuration appears in the UI. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | SMTP provider settings for signup confirmation, password reset, password linking and alerts. Default STARTTLS on port 587 with certificate verification. |
 | `PG_BIN` | Optional PostgreSQL 17+ binary directory for the service and backup/restore helpers. Use the same major version as an existing profile; upgrading binaries alone does not upgrade database files. |
 | `BACKUP_S3_PREFIX`, `BACKUP_AGE_RECIPIENT` | Private S3 destination (`s3://bucket/prefix`) and the public age recipient for the optional daily backup. |
 
@@ -95,7 +95,7 @@ The three services bind application ports to loopback, run without root, restart
 
 Install `infra/Caddyfile` at `/etc/caddy/Caddyfile`. Create `/etc/caddy/pulsegrid.env` containing only `CADDY_ADDRESS=pulse.example.com` and `CADDY_EMAIL=operator@example.com` (root:caddy, mode 0640). Add a Caddy service drop-in with `[Service]` and `EnvironmentFile=/etc/caddy/pulsegrid.env`. Reload systemd, then enable/restart Caddy using its official package service. Only Caddy should listen publicly on 80/443. Point DNS at the server, keep SSH restricted, and permit the chosen public ports. See [Caddy installation](https://caddyserver.com/docs/install) and [service operation](https://caddyserver.com/docs/running).
 
-Caddy proxies `/api/*` to `127.0.0.1:8000` and other traffic to `127.0.0.1:3000`. Keep production Secure cookies enabled and configure both Google OAuth settings before opening the app. Verify readiness, Google sign-in, monitor creation, fresh checks, history and notification delivery after deploying. A reachable frontend alone does not prove the worker is running.
+Caddy proxies `/api/*` to `127.0.0.1:8000` and other traffic to `127.0.0.1:3000`. Caddy sets the API’s forwarded client address from the connection. The API listens on loopback and trusts proxy headers only from `127.0.0.1`. Keep production Secure cookies enabled and configure Google OAuth and SMTP for the sign-in methods you offer. Verify readiness, sign-in, monitor creation, fresh checks, history and notification delivery after deploying. A reachable frontend alone does not prove the worker is running.
 
 ## Health and operations
 
@@ -123,7 +123,7 @@ Set up these checks from accounts outside the PulseGrid host, with a verified op
 
 The worker sends a ping only after a successful scheduler iteration and skips it if any unpaused, unarchived monitor is more than two minutes overdue. An empty schedule can still be healthy. The app's internal worker status uses a separate 15-second threshold. Use `journalctl -u pulsegrid-api -u pulsegrid-worker -u caddy -n 100` to investigate. Synchronize the system clock for scheduling and TOTP.
 
-The main **Alerts** screen shows the latest test and unresolved delivery failures, including retries. **Delivered** means the configured provider accepted the notification. Each account can save 20 services; paused and archived services count, and permanent deletion frees a slot.
+Google sign-in enables email alerts for the account address. In **Settings → Email alerts**, users can turn emails off, send a test, and see its latest result. **Delivered** means the configured provider accepted the email. Each account can save 20 services. Paused and archived services count, and permanent deletion frees a slot.
 
 ## Backup and restore
 
@@ -181,4 +181,12 @@ The local development and capacity databases were copied to native PostgreSQL du
 
 ## Schema changes
 
-The current model has 13 application tables at revision `0005`. See [Data model](DATA_MODEL.md) for ownership, configuration history, archive/delete behavior, migration preflight and rollback. Stop API/worker writers and back up before migrating an older installation. Group-scoped destinations block the migration until their coverage is explicitly reviewed.
+The current model has 13 application tables at revision `0006`. See [Data model](DATA_MODEL.md) for ownership, configuration history, archive/delete behavior, migration preflight and rollback. Stop API/worker writers and back up before migrating an older installation. Group-scoped destinations block the migration until their coverage is explicitly reviewed.
+
+
+### Authentication release check
+
+1. Configure a staging SMTP inbox and sender. With a fresh email, request signup, open the confirmation link, set a password and log in. Use a second browser to log in again.
+2. Request **Forgot password?**, open the reset email and set a new password. Check that both previous sessions end, the old password fails, the new password works and sign-out returns to the login page.
+3. Configure a Google OAuth Web client with the exact staging callback URL and sign in with a real Google test user that already has a staging monitor. Verify that the same monitor and its history are visible after signing out and returning. Exercise both linking paths from account settings and check that each sign-in method opens the same account.
+4. From one source IP, make 31 Google-start requests within five minutes with a valid CSRF token. Check for HTTP 429, including when sending a fake `X-Forwarded-For` header. Check that a second source IP can still start sign-in.

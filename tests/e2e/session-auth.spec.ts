@@ -12,7 +12,7 @@ async function signedOut(page: Page) {
   );
 }
 
-test("login offers only Google and does not poll while signed out", async ({
+test("login offers email and Google without polling while signed out", async ({
   page,
 }) => {
   await signedOut(page);
@@ -24,18 +24,67 @@ test("login offers only Google and does not poll while signed out", async ({
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();
-  await expect(page.getByLabel("Email address")).toHaveCount(0);
-  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("or sign in with email")).toHaveCount(0);
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sign in", exact: true }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Log in", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeVisible();
   const initial = checks;
   await page.waitForTimeout(11000);
   expect(checks).toBe(initial);
+});
+
+test("signup requests a link, resends it, and handles a used link opened in the same tab", async ({
+  page,
+}) => {
+  await signedOut(page);
+  const email = "new-user@example.com";
+  let requests = 0;
+  await page.route("**/api/v1/auth/email/signup", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ email });
+    requests++;
+    return route.fulfill({
+      status: 202,
+      json: { detail: "If eligible, you’ll receive a confirmation link." },
+    });
+  });
+  await page.route("**/api/v1/auth/email/confirm", (route) =>
+    route.fulfill({
+      status: 400,
+      json: { detail: "This link was already used." },
+    }),
+  );
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Send confirmation link" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Check your inbox" }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Resend confirmation email" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Request submitted again",
+  );
+  expect(requests).toBe(2);
+
+  await page.goto("/auth/email");
+  await expect(
+    page.getByText("This link is invalid.", { exact: false }),
+  ).toBeVisible();
+  await page.goto("/auth/email#flow=confirm&token=fixture-token");
+  await page
+    .getByLabel("New password (12+ characters)")
+    .fill("long-password-123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("link", { name: "Request a new link" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Create your account" }),
+  ).toBeVisible();
 });
 
 test("session checks retain settings during interruption, recover, renew, and reject revoked sessions", async ({
@@ -72,6 +121,18 @@ test("session checks retain settings during interruption, recover, renew, and re
     return route.fulfill({ status: 401, json: { detail: "Session revoked" } });
   });
   await page.route("**/api/v1/sessions", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route("**/api/v1/notification-settings", (route) =>
+    route.fulfill({
+      json: {
+        email_available: false,
+        email_enabled: false,
+        email_channel_id: null,
+      },
+    }),
+  );
+  await page.route("**/api/v1/deliveries?*", (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route("**/api/v1/dashboard", (route) =>

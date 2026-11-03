@@ -2,6 +2,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public fields: Record<string, string> = {},
   ) {
     super(message);
   }
@@ -75,11 +76,24 @@ export async function api<T = Record<string, unknown>>(
     const data = await r
       .json()
       .catch(() => ({ detail: "API temporarily unavailable" }));
+    const issues: { loc?: string[]; msg: string }[] = Array.isArray(data.detail)
+      ? data.detail
+      : [];
     const detail =
       typeof data.detail === "string"
         ? data.detail
-        : data.detail?.map((d: { msg: string }) => d.msg).join("; ");
-    throw new ApiError(r.status, detail || `Request failed (${r.status})`);
+        : issues.map((issue) => issue.msg).join("; ");
+    const fields = Object.fromEntries(
+      issues.flatMap((issue) => {
+        const field = issue.loc?.[1];
+        return field ? [[field, issue.msg]] : [];
+      }),
+    );
+    throw new ApiError(
+      r.status,
+      detail || `Request failed (${r.status})`,
+      fields,
+    );
   }
   return r.json();
 }

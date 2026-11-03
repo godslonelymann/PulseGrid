@@ -1,10 +1,10 @@
 # PulseGrid data model
 
-Schema revision `0005` has **13 application tables**, plus Alembic's migration bookkeeping table. Users own monitors directly. Enabled notification destinations cover all current and future monitors belonging to their owner.
+Schema revision `0008` has **13 application tables**, plus Alembic's migration bookkeeping table. Users own monitors directly. Enabled notification destinations cover all current and future monitors belonging to their owner. Revision `0008` enables email alerts for existing email-confirmed accounts without a saved preference. Revision `0007` adds the timestamp for email addresses confirmed by PulseGrid. Revision `0006` sets up email alerts for Google accounts without a saved email preference.
 
 | Table | Responsibility |
 | --- | --- |
-| `users` | Email, password hash, Google identity, encrypted MFA secret and replay protection. |
+| `users` | Email and confirmation timestamp, password hash, Google identity, encrypted MFA secret and replay protection. |
 | `sessions` | Login lifetime, revocation, browser label and recent activity. |
 | `refresh_tokens` | Hashed renewal tokens, consumption and replacement history. |
 | `recovery_codes` | Hashed single-use MFA backup codes. |

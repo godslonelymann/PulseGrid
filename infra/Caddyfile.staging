@@ -19,7 +19,9 @@ https://localhost:8443 {
 		request_body {
 			max_size 16KB
 		}
-		reverse_proxy 127.0.0.1:8002
+		reverse_proxy 127.0.0.1:8002 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 	handle {
 		reverse_proxy 127.0.0.1:3002

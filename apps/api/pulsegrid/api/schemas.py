@@ -48,6 +48,10 @@ class MonitorInput(BaseModel):
         return self
 
 
+class EmailAlertPreference(BaseModel):
+    enabled: bool
+
+
 class ChannelInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)

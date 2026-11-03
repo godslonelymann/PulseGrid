@@ -56,10 +56,10 @@ def provider(monkeypatch):
     return data
 
 
-async def begin(client, provider):
+async def begin(client, provider, path="start", **body):
     await client.get("/api/v1/auth/csrf")
-    client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
-    response = await client.post("/api/v1/auth/google/start")
+    client.headers.update({"origin": cfg.public_origin, "x-csrf-token": client.cookies["pg_csrf"]})
+    response = await client.post(f"/api/v1/auth/google/{path}", json=body or None)
     assert response.status_code == 200, response.text
     params = {k: v[0] for k, v in parse_qs(urlsplit(response.json()["authorization_url"]).query).items()}
     assert params["scope"] == "openid email"
@@ -104,7 +104,15 @@ async def test_google_signup_session_refresh_and_returning_signin(client, provid
     me = (await client.get("/api/v1/me")).json()
     assert me["email"] == "new.user@gmail.com"
     assert me["google_connected"] and not me["password_enabled"]
+    channels = (await client.get("/api/v1/notification-channels")).json()
+    assert len(channels) == 1
+    assert channels[0]["email"] == me["email"] and channels[0]["enabled"]
     client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
+    monitor = await client.post(
+        "/api/v1/monitors", json={"url": "http://127.0.0.1:18080/", "name": "Returning monitor"}
+    )
+    assert monitor.status_code == 201
+    assert (await client.put("/api/v1/notification-settings", json={"enabled": False})).is_success
     assert (await client.post("/api/v1/auth/refresh")).status_code == 200
     client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
     assert (await client.post("/api/v1/auth/logout")).status_code == 200
@@ -113,6 +121,9 @@ async def test_google_signup_session_refresh_and_returning_signin(client, provid
     provider["claims"]["email"] = "changed.email@gmail.com"
     assert callback_values(await finish(client, state)) == {"google_success": "1"}
     assert (await client.get("/api/v1/me")).json()["id"] == me["id"]
+    dashboard = (await client.get("/api/v1/dashboard")).json()
+    assert [row["id"] for row in dashboard["monitors"]] == [monitor.json()["id"]]
+    assert (await client.get("/api/v1/notification-channels")).json() == [{**channels[0], "enabled": False}]
     async with Session() as session:
         assert await session.scalar(select(func.count()).select_from(User)) == 1
         assert await session.scalar(select(func.count()).select_from(Audit).where(Audit.kind == "google_signup")) == 1
@@ -216,7 +227,7 @@ async def test_google_start_requires_csrf(client, provider):
     assert (await client.post("/api/v1/auth/google/start", headers={"x-csrf-token": "wrong"})).status_code == 403
 
 
-async def test_google_only_disables_password_login_and_security_forms(owner, monkeypatch):
+async def test_unconfirmed_legacy_account_requires_legacy_password_auth(owner, monkeypatch):
     monkeypatch.setattr(cfg, "enable_legacy_password_auth", False)
     me = (await owner.get("/api/v1/me")).json()
     assert me["password_enabled"] is False
@@ -296,3 +307,76 @@ async def test_google_migration_preserves_existing_mfa(owner, provider, monkeypa
     )
     assert response.status_code == 200
     assert (await owner.get("/api/v1/me")).status_code == 200
+
+
+async def test_connect_google_requires_password_and_mfa_then_preserves_account(owner, provider):
+    me = (await owner.get("/api/v1/me")).json()
+    monitor = await owner.post("/api/v1/monitors", json={"url": "http://127.0.0.1:18080/", "name": "Keep history"})
+    assert monitor.status_code == 201
+    _, recovery = await enable_mfa(owner)
+    assert (await owner.post("/api/v1/auth/google/link", json={"password": "wrong-password"})).status_code == 403
+    assert (await owner.post("/api/v1/auth/google/link", json={"password": "correct-password-123"})).status_code == 403
+
+    state = await begin(owner, provider, "link", password="correct-password-123", code=recovery[0])
+    assert callback_values(await finish(owner, state)) == {"google_link": "wrong_account"}
+    state = await begin(owner, provider, "link", password="correct-password-123", code=recovery[1])
+    provider["claims"]["email"] = me["email"]
+    assert callback_values(await finish(owner, state)) == {"google_link": "connected"}
+    linked = (await owner.get("/api/v1/me")).json()
+    assert linked["id"] == me["id"] and linked["session_id"] == me["session_id"]
+    assert linked["google_connected"] and linked["password_enabled"]
+    assert (await owner.get(f"/api/v1/monitors/{monitor.json()['id']}")).is_success
+
+
+async def test_connect_google_refuses_revoked_session(owner, provider):
+    state = await begin(owner, provider, "link", password="correct-password-123")
+    provider["claims"]["email"] = "owner@example.com"
+    assert (await owner.post("/api/v1/auth/logout")).is_success
+    assert callback_values(await finish(owner, state)) == {"google_link": "expired"}
+    async with Session() as session:
+        assert (await session.scalar(select(User))).google_sub is None
+
+
+async def test_google_user_must_prove_google_and_confirm_mail_before_adding_password(client, provider, monkeypatch):
+    from pulsegrid.api import email_auth
+    from pulsegrid.api.main import app
+
+    monkeypatch.setattr(cfg, "enable_legacy_password_auth", False)
+    monkeypatch.setattr(cfg, "smtp_host", "test-smtp")
+    monkeypatch.setattr(cfg, "smtp_from", "pulsegrid@example.com")
+    messages = []
+
+    async def send(message, **_):
+        messages.append(message.get_content())
+
+    monkeypatch.setattr(email_auth.aiosmtplib, "send", send)
+    state = await begin(client, provider)
+    await finish(client, state)
+    me = (await client.get("/api/v1/me")).json()
+    state = await begin(client, provider, "add-password")
+    provider["claims"]["sub"] = "another-google-account"
+    assert callback_values(await finish(client, state)) == {"google_link": "wrong_account"}
+    assert not messages
+
+    state = await begin(client, provider, "add-password")
+    assert callback_values(await finish(client, state)) == {"google_link": "check_email"}
+    link = next(line for line in messages[0].splitlines() if line.startswith("http"))
+    token = parse_qs(urlsplit(link).fragment)["token"][0]
+    body = {"token": token, "password": "added-password-123"}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as other:
+        state = await begin(other, provider)
+        await finish(other, state)
+        other.headers["x-csrf-token"] = other.cookies["pg_csrf"]
+        assert (await other.post("/api/v1/auth/email/add-password", json=body)).status_code == 403
+
+    assert (await client.post("/api/v1/auth/email/add-password", json=body)).is_success
+    assert (await client.post("/api/v1/auth/email/add-password", json=body)).status_code == 400
+    assert (await client.post("/api/v1/auth/logout")).is_success
+    await client.get("/api/v1/auth/csrf")
+    client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
+    assert (
+        await client.post("/api/v1/auth/login", json={"email": me["email"], "password": body["password"]})
+    ).is_success
+    linked = (await client.get("/api/v1/me")).json()
+    assert linked["id"] == me["id"] and linked["google_connected"] and linked["password_enabled"]

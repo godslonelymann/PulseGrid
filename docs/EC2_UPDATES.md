@@ -23,14 +23,27 @@ After the update, follow the [operations guide](OPERATIONS.md#health-and-operati
 to activate the independent HTTPS and worker checks, and
 [install and rehearse the daily encrypted S3 backup](OPERATIONS.md#backup-and-restore).
 
-## One-time conversion of the existing password account
+## Enable visitor IP rate limits on the existing host
 
-New users sign up directly through **Continue with Google**. Do not bootstrap a
-password account. Normal installations disable password sign-in and password
-settings, including direct password-login API requests.
+The update script preserves the installed service and shared Caddy configuration.
+On the first release with email sign-in, use `sudo systemctl edit pulsegrid-api`
+to override the API command. Use an empty `ExecStart=` followed by a copy of the
+effective `ExecStart` with `--no-proxy-headers` replaced by
+`--proxy-headers --forwarded-allow-ips=127.0.0.1`. Keep the existing
+`--host 127.0.0.1 --port 8100` and service paths. Reload systemd and restart
+`pulsegrid-api`. Use `systemctl cat pulsegrid-api` to inspect the installed command.
 
-The account already created on EC2 must be converted once to keep its monitors,
-history and email-alert settings. After deploying the update, run:
+Verify that the PulseGrid Caddy route proxies directly to `127.0.0.1:8100` and
+derives `X-Forwarded-For` from the incoming connection. Caddy's default does this
+when there are no trusted proxies in front of it. If the shared configuration
+overrides the header, use `header_up X-Forwarded-For {remote_host}` in the
+PulseGrid API proxy only. Run the staging source-IP checks before release.
+
+## Optional conversion of an older password account
+
+New users can choose **Continue with Google** or create an email account after configuring SMTP. The conversion below applies to older accounts provisioned by an operator whose email was never confirmed through PulseGrid.
+
+To convert the original EC2 account while retaining its monitors, history and email-alert settings, run:
 
 ```sh
 cd /opt/pulsegrid
@@ -62,9 +75,7 @@ curl -f https://mypulsegrid.duckdns.org/api/v1/health/ready
 sudo systemctl status pulsegrid-api pulsegrid-worker pulsegrid-web
 ```
 
-The sign-in page should contain only **Continue with Google**, with no email or
-password form. After the one-time conversion, the existing monitors should still
-be visible and fresh checks should continue arriving.
+Check **Continue with Google**, email signup, login and password recovery with the configured providers. After conversion, verify that existing monitors remain visible and fresh checks continue arriving.
 
 Legacy password API regressions use an explicit `ENABLE_LEGACY_PASSWORD_AUTH=true`
 override in isolated verification profiles only. Leave this unset on EC2.

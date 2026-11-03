@@ -11,7 +11,7 @@ mkdir -p verification .local-services/staging/caddy-data .local-services/staging
 pids=()
 cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; wait || true; }
 trap cleanup EXIT INT TERM
-"${runner[@]}" .venv/bin/uvicorn pulsegrid.api.main:app --host 127.0.0.1 --port 8002 --no-proxy-headers > verification/staging-api.log 2>&1 & pids+=("$!")
+"${runner[@]}" .venv/bin/uvicorn pulsegrid.api.main:app --host 127.0.0.1 --port 8002 --proxy-headers --forwarded-allow-ips=127.0.0.1 > verification/staging-api.log 2>&1 & pids+=("$!")
 "${runner[@]}" .venv/bin/python -m pulsegrid.worker.runner > verification/staging-worker.log 2>&1 & pids+=("$!")
 HOSTNAME=127.0.0.1 PORT=3002 NODE_ENV=production node apps/web/.next/standalone/server.js > verification/staging-web.log 2>&1 & pids+=("$!")
 XDG_DATA_HOME="$PWD/.local-services/staging/caddy-data" XDG_CONFIG_HOME="$PWD/.local-services/staging/caddy-config" caddy run --config infra/Caddyfile.staging > verification/staging-caddy.log 2>&1 & pids+=("$!")

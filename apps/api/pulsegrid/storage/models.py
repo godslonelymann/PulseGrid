@@ -44,6 +44,7 @@ class User(Base):
     id = identity()
     email = Column(String(254), unique=True, nullable=False)
     password_hash = Column(Text)
+    email_verified_at = timecol()
     google_sub = Column(String(255), unique=True)
     totp_secret = Column(Text)
     last_totp_step = Column(Integer)

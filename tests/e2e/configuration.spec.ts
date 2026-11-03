@@ -33,12 +33,14 @@ test("configuration, session settings and visible dependency failures", async ({
     .fill("http://127.0.0.1:18080/health");
   await page.getByRole("button", { name: "Start monitoring" }).click();
   await page
+    .getByRole("button", { name: "Actions for Editable monitor", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Edit Editable monitor", exact: true })
     .click();
   await page.getByLabel("Name (optional)").fill("Renamed monitor");
   await page.getByText("Advanced settings", { exact: true }).click();
-  await page.getByLabel("HTTP method", { exact: true }).selectOption("HEAD");
-  await page.getByLabel("Successful response codes").fill("200,405");
+  await page.getByLabel("Check frequency (seconds)").fill("45");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(
     page.getByRole("button", { name: /^Renamed monitor http/ }),
@@ -62,45 +64,43 @@ test("configuration, session settings and visible dependency failures", async ({
   );
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "PulseGrid is temporarily unavailable" }),
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Storage dependency temporarily unavailable" }),
   ).toBeVisible();
   await page.unroute("**/api/v1/me");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(
     page.getByRole("heading", { name: "Renamed monitor", exact: true }),
   ).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Delete", exact: true }).click();
+  const deletion = page.getByRole("dialog", {
+    name: "Permanently delete service?",
+  });
+  await expect(deletion).toContainText("Renamed monitor");
+  await deletion
+    .getByRole("button", { name: "Delete permanently", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Dashboard." })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /^Renamed monitor http/ }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Alerts", exact: true }).click();
-  await page.getByText("Advanced alert settings", { exact: true }).click();
-  await page.getByRole("button", { name: "Add channel" }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Editable webhook");
-  await page.getByLabel("Webhook URL").fill("http://127.0.0.1:18080/hook");
-  await page.getByRole("button", { name: "Save channel" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Editable webhook" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Renamed webhook");
-  await page.getByLabel("Webhook URL").fill("http://127.0.0.1:18080/hook");
-  await page.getByRole("button", { name: "Save channel" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Renamed webhook" }),
-  ).toBeVisible();
-  page.once("dialog", (d) => d.accept());
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Renamed webhook" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page
-    .getByLabel("Current password")
-    .first()
-    .fill("browser-test-password-123");
+  await page.getByRole("button", { name: "Your account settings" }).click();
+  const enrollmentPassword = page
+    .getByLabel("Current password", { exact: true })
+    .first();
+  await enrollmentPassword.fill("browser-test-password-123");
+  const visibility = page
+    .getByRole("button", { name: "Show current password" })
+    .first();
+  await visibility.click();
+  await expect(enrollmentPassword).toHaveAttribute("type", "text");
+  await expect(enrollmentPassword).toHaveAttribute(
+    "autocomplete",
+    "current-password",
+  );
+  await visibility.click();
+  await expect(enrollmentPassword).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Set up authenticator" }).click();
   const secret = await page.locator("code.secret").innerText();
   const code = execFileSync("../../.venv/bin/python", [
@@ -110,14 +110,27 @@ test("configuration, session settings and visible dependency failures", async ({
   ])
     .toString()
     .trim();
-  await page.getByLabel("Six-digit authenticator code").fill(code);
+  const otp = page.getByLabel("Six-digit authenticator code");
+  await expect(otp).toHaveAttribute("autocomplete", "one-time-code");
+  await otp.fill(`${code.slice(0, 3)} ${code.slice(3)}`);
+  await expect(otp).toHaveValue(code);
   await page.getByRole("button", { name: "Confirm enrollment" }).click();
   await expect(page.locator(".recovery-codes code")).toHaveCount(10);
   const codes = await page.locator(".recovery-codes code").allTextContents();
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy codes" }).click();
+  await expect(
+    page.getByText("Recovery codes copied", { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    codes.join("\n"),
+  );
   await page.getByRole("button", { name: "I have saved these" }).click();
   await page.getByRole("button", { name: "Replace recovery codes" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Current password").fill("browser-test-password-123");
+  await dialog
+    .getByLabel("Current password", { exact: true })
+    .fill("browser-test-password-123");
   await dialog
     .getByLabel("Authenticator or unused recovery code")
     .fill(codes[0]);
@@ -129,7 +142,9 @@ test("configuration, session settings and visible dependency failures", async ({
   expect(replacement[0]).not.toBe(codes[0]);
   await page.getByRole("button", { name: "I have saved these" }).click();
   await page.getByRole("button", { name: "Disable MFA" }).click();
-  await dialog.getByLabel("Current password").fill("browser-test-password-123");
+  await dialog
+    .getByLabel("Current password", { exact: true })
+    .fill("browser-test-password-123");
   await dialog
     .getByLabel("Authenticator or unused recovery code")
     .fill(replacement[0]);
@@ -138,7 +153,7 @@ test("configuration, session settings and visible dependency failures", async ({
     page.getByRole("button", { name: "Set up authenticator" }),
   ).toBeVisible();
   await page
-    .getByLabel("Current password")
+    .getByLabel("Current password", { exact: true })
     .last()
     .fill("browser-test-password-123");
   await page

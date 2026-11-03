@@ -35,11 +35,11 @@ test("Google button starts authorization and fits desktop and mobile", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeEnabled();
-  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sign in", exact: true }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Log in", exact: true }),
+  ).toBeVisible();
   await page.screenshot({
     path: "../../verification/google-signup-desktop.png",
     fullPage: true,
@@ -48,8 +48,8 @@ test("Google button starts authorization and fits desktop and mobile", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -76,8 +76,8 @@ test("Google button is disabled until credentials are configured", async ({
     page.getByText("Google sign-in is not configured yet."),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sign in", exact: true }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Log in", exact: true }),
+  ).toBeVisible();
 });
 
 test("Google callback errors and MFA challenges are displayed and removed from the URL", async ({
@@ -92,7 +92,7 @@ test("Google callback errors and MFA challenges are displayed and removed from t
   await page.goto("about:blank");
   await page.goto("/#google_challenge=one-time-google-challenge");
   await expect(
-    page.getByRole("heading", { name: "One more check." }),
+    page.getByRole("heading", { name: "Verify your sign-in" }),
   ).toBeVisible();
   await expect(page).toHaveURL("/");
   await page.route("**/api/v1/auth/verify", (route) => {
@@ -142,23 +142,48 @@ test("Google account settings distinguish current and global sign-out", async ({
         ? { monitors: [], counts: {} }
         : path.endsWith("/worker-status")
           ? { workers: [], outbox_pending: 0, outbox_failed: 0 }
-          : [];
+          : path.endsWith("/notification-settings")
+            ? {
+                email_available: true,
+                email_enabled: true,
+                email_channel_id: "email",
+              }
+            : [];
     return route.fulfill({ json });
   });
+  await page.route("**/api/v1/sessions", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "other-session",
+          label: "Firefox",
+          created_at: "2026-01-01T00:00:00Z",
+          last_activity: "2026-01-01T00:00:00Z",
+          current: false,
+        },
+      ],
+    }),
+  );
   await page.goto("/?view=settings#google_success=1");
   await expect(
-    page.getByRole("heading", { name: "Google account", exact: true }),
+    page.getByRole("heading", { name: "Account & security" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Google account", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Manage Google security" }),
-  ).toHaveAttribute("href", "https://myaccount.google.com/security");
+  ).toHaveCount(0);
   await expect(page.getByLabel("Current password")).toHaveCount(0);
+  await expect(
+    page.getByRole("switch", { name: "Email me about outages and recoveries" }),
+  ).toBeChecked();
   await expect(page.getByText("This browser", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sign out", exact: true }),
+    page.getByRole("button", { name: "Sign out of this browser", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL("/?view=settings");
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 320, height: 844 });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -168,6 +193,30 @@ test("Google account settings distinguish current and global sign-out", async ({
     name: "Sign out everywhere",
     exact: true,
   });
+  const currentAction = page.getByRole("button", {
+    name: "Sign out of this browser",
+    exact: true,
+  });
+  const otherAction = page.getByRole("button", {
+    name: "End this session",
+    exact: true,
+  });
+  await expect(signOutEverywhere).toHaveCSS("width", "200px");
+  await expect(currentAction).toHaveCSS("width", "200px");
+  await expect(otherAction).toHaveCSS("width", "200px");
+  const right = await signOutEverywhere.evaluate(
+    (button) => button.getBoundingClientRect().right,
+  );
+  expect(
+    await currentAction.evaluate(
+      (button) => button.getBoundingClientRect().right,
+    ),
+  ).toBe(right);
+  expect(
+    await otherAction.evaluate(
+      (button) => button.getBoundingClientRect().right,
+    ),
+  ).toBe(right);
   await signOutEverywhere.click();
   const dialog = page.getByRole("dialog", { name: "Sign out everywhere?" });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();

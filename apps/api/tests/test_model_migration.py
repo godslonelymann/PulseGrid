@@ -8,6 +8,7 @@ from datetime import timedelta
 
 import psycopg
 import pytest
+from pulsegrid.auth.security import decrypt
 from pulsegrid.storage.db import now
 from sqlalchemy import create_engine, inspect
 
@@ -177,6 +178,66 @@ async def test_migration_refuses_to_broaden_selective_alerts(legacy_database):
         )
 
 
+async def test_migration_enables_email_for_google_accounts_without_preferences(legacy_database):
+    assert (result := migrate("0005")).returncode == 0, result.stderr
+    new, disabled, legacy = (uuid.uuid4() for _ in range(3))
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            "INSERT INTO users(id,email,google_sub,created_at) VALUES "
+            "(%s,'new@example.test','sub-new',now()), (%s,'disabled@example.test','sub-disabled',now())",
+            (new, disabled),
+        )
+        connection.execute(
+            "INSERT INTO users(id,email,password_hash,created_at) VALUES (%s,'legacy@example.test','hash',now())",
+            (legacy,),
+        )
+        connection.execute(
+            "INSERT INTO notification_channels(id,owner_id,name,kind,config,enabled) "
+            "VALUES (%s,%s,'Existing preference','email','existing',false)",
+            (uuid.uuid4(), disabled),
+        )
+    assert (result := migrate("head")).returncode == 0, result.stderr
+    with psycopg.connect(DSN) as connection:
+        channels = {
+            owner: (config, enabled)
+            for owner, config, enabled in connection.execute(
+                "SELECT owner_id,config,enabled FROM notification_channels WHERE kind = 'email'"
+            )
+        }
+    assert set(channels) == {new, disabled}
+    assert decrypt(channels[new][0]) == "new@example.test" and channels[new][1]
+    assert channels[disabled] == ("existing", False)
+
+
+async def test_migration_enables_alerts_for_confirmed_email_without_preferences(legacy_database):
+    assert (result := migrate("0007")).returncode == 0, result.stderr
+    confirmed, disabled, unverified = (uuid.uuid4() for _ in range(3))
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            "INSERT INTO users(id,email,password_hash,created_at,email_verified_at) VALUES "
+            "(%s,'confirmed@example.test','hash',now(),now()), "
+            "(%s,'disabled@example.test','hash',now(),now()), "
+            "(%s,'unverified@example.test','hash',now(),NULL)",
+            (confirmed, disabled, unverified),
+        )
+        connection.execute(
+            "INSERT INTO notification_channels(id,owner_id,name,kind,config,enabled) "
+            "VALUES (%s,%s,'Existing preference','email','existing',false)",
+            (uuid.uuid4(), disabled),
+        )
+    assert (result := migrate("head")).returncode == 0, result.stderr
+    with psycopg.connect(DSN) as connection:
+        channels = {
+            owner: (config, enabled)
+            for owner, config, enabled in connection.execute(
+                "SELECT owner_id,config,enabled FROM notification_channels WHERE kind = 'email'"
+            )
+        }
+    assert set(channels) == {confirmed, disabled}
+    assert decrypt(channels[confirmed][0]) == "confirmed@example.test" and channels[confirmed][1]
+    assert channels[disabled] == ("existing", False)
+
+
 async def test_old_backup_is_rejected_before_replacing_current_database(legacy_database, owner, tmp_path):
     from test_native_operations import command
 
@@ -192,4 +253,3 @@ async def test_old_backup_is_rejected_before_replacing_current_database(legacy_d
     code, output = await command("restore", archive, "--confirm-replace-database")
     assert code != 0 and "Backup uses an older schema" in output, output
     assert (await owner.get("/api/v1/me")).status_code == 200
-

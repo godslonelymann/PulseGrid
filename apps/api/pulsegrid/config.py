@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     public_origin: str = "http://localhost:3000"
     google_client_id: str = ""
     google_client_secret: str = ""
-    # Compatibility for isolated legacy verification fixtures; normal installs use Google only.
+    # Allows password login for older, operator-provisioned accounts without confirmed email.
     enable_legacy_password_auth: bool = False
     jwt_secret: str
     encryption_key: str

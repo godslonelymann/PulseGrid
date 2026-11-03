@@ -9,7 +9,7 @@ Group=pulsegrid
 WorkingDirectory=/opt/pulsegrid
 Environment=ENV_FILE=/etc/pulsegrid/pulsegrid.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/pulsegrid/.venv/bin/python scripts/run-env.py /opt/pulsegrid/.venv/bin/uvicorn pulsegrid.api.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+ExecStart=/opt/pulsegrid/.venv/bin/python scripts/run-env.py /opt/pulsegrid/.venv/bin/uvicorn pulsegrid.api.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
