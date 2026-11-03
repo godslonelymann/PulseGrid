@@ -172,7 +172,7 @@ test("owner MFA, monitoring, outage/recovery, charts, cross-tab refresh and revo
     revokedTab.getByRole("heading", { name: "Dashboard." }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();

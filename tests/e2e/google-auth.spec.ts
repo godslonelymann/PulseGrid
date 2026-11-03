@@ -112,9 +112,23 @@ test("Google callback errors and MFA challenges are displayed and removed from t
   );
 });
 
-test("Google-only account shows Google security settings", async ({ page }) => {
+test("Google account settings distinguish current and global sign-out", async ({
+  page,
+}) => {
+  let signedOut = false;
   await page.route("**/api/v1/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/logout-all")) {
+      expect(route.request().method()).toBe("POST");
+      signedOut = true;
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (signedOut && (path.endsWith("/me") || path.endsWith("/auth/refresh"))) {
+      return route.fulfill({
+        status: 401,
+        json: { detail: "Sign in required" },
+      });
+    }
     const json = path.endsWith("/me")
       ? {
           id: "google-user",
@@ -139,8 +153,32 @@ test("Google-only account shows Google security settings", async ({ page }) => {
     page.getByRole("link", { name: "Manage Google security" }),
   ).toHaveAttribute("href", "https://myaccount.google.com/security");
   await expect(page.getByLabel("Current password")).toHaveCount(0);
+  await expect(page.getByText("This browser", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Sign out everywhere" }),
+    page.getByRole("button", { name: "Sign out", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL("/?view=settings");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  const signOutEverywhere = page.getByRole("button", {
+    name: "Sign out everywhere",
+    exact: true,
+  });
+  await signOutEverywhere.click();
+  const dialog = page.getByRole("dialog", { name: "Sign out everywhere?" });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(signOutEverywhere).toBeFocused();
+  expect(signedOut).toBe(false);
+  await signOutEverywhere.click();
+  await dialog
+    .getByRole("button", { name: "Sign out everywhere", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome to PulseGrid." }),
+  ).toBeVisible();
+  expect(signedOut).toBe(true);
 });

@@ -23,8 +23,10 @@ import {
   ArrowUpRight,
   Bell,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleHelp,
+  Laptop,
   LayoutDashboard,
   LogOut,
   Pause,
@@ -879,13 +881,6 @@ function Dashboard({ user }: { user: User }) {
           {view === "settings" && (
             <Account user={user} act={act} notice={setNotice} />
           )}
-          <footer className="page-footer">
-            <span>
-              <Activity size={14} />
-              PulseGrid
-            </span>
-            <span>A clearer picture.</span>
-          </footer>
         </div>
       </main>
       {modal === "monitor" && (
@@ -1058,10 +1053,10 @@ function MonitorDetail({
   const rows = results.data || [];
   return (
     <>
-      <button className="text-button" onClick={back}>
+      <button className="text-button service-back" onClick={back}>
         <ArrowLeft size={15} /> Back to dashboard
       </button>
-      <div className="page-heading">
+      <div className="page-heading service-heading">
         <div>
           <div className="eyebrow">SERVICE STATUS</div>
           <h1>{m.name}</h1>
@@ -1105,21 +1100,24 @@ function MonitorDetail({
           history in More details.
         </p>
       )}
-      <div className="section-heading">
+      <div className="section-heading service-history-heading">
         <h2>Service history</h2>
-        <select
-          aria-label="Metric window"
-          value={hours}
-          onChange={(e) => {
-            setHours(Number(e.target.value));
-            setOffset(0);
-          }}
-        >
-          <option value={1}>Last hour</option>
-          <option value={24}>Last 24 hours</option>
-          <option value={168}>Last 7 days</option>
-          <option value={720}>Last 30 days</option>
-        </select>
+        <div className="metric-window">
+          <select
+            aria-label="Metric window"
+            value={hours}
+            onChange={(e) => {
+              setHours(Number(e.target.value));
+              setOffset(0);
+            }}
+          >
+            <option value={1}>Last hour</option>
+            <option value={24}>Last 24 hours</option>
+            <option value={168}>Last 7 days</option>
+            <option value={720}>Last 30 days</option>
+          </select>
+          <ChevronDown size={16} aria-hidden="true" />
+        </div>
       </div>
       {(results.error || metrics.error || incidents.error) && (
         <p className="error" role="alert">
@@ -1304,14 +1302,17 @@ function MonitorDetail({
             </div>
           </section>
           <section className="panel">
-            <h2>Configuration history</h2>
-            <p className="hint">
-              Latest 100 changes. Earlier settings that were never recorded are
-              shown as unknown.
-            </p>
-            {versions.error ? (
-              <p className="error">Configuration history is unavailable.</p>
-            ) : (
+            <div className="history-panel-heading">
+              <h2>Configuration history</h2>
+              <p className="hint">
+                Latest 100 changes. Earlier settings that were never recorded
+                are shown as unknown.
+              </p>
+              {versions.error && (
+                <p className="error">Configuration history is unavailable.</p>
+              )}
+            </div>
+            {!versions.error && (
               <div className="table-scroll">
                 <table>
                   <thead>
@@ -1851,7 +1852,12 @@ function Account({
 }) {
   const client = useQueryClient();
   const sessions = useData<BrowserSession[]>("sessions", "/sessions");
+  const currentSession = sessions.data?.find((session) => session.current);
+  const otherSessions = sessions.data?.filter((session) => !session.current);
   const [error, setError] = useState("");
+  const [endingSession, setEndingSession] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const signOutEverywhere = useRef<HTMLButtonElement>(null);
   const [enrollment, setEnrollment] = useState<{
     secret: string;
     uri: string;
@@ -1861,171 +1867,97 @@ function Account({
   const [manage, setManage] = useState<"disable" | "recovery-codes" | null>(
     null,
   );
-  const logout = (all = false) => {
-    void act(`/auth/${all ? "logout-all" : "logout"}`)
-      .then(() => client.clear())
-      .catch((e) => setError(message(e)));
+  const closeSignOut = () => {
+    setConfirmSignOut(false);
+    signOutEverywhere.current?.focus();
   };
+  async function endSession(target: "current" | "all" | BrowserSession) {
+    setError("");
+    setEndingSession(true);
+    try {
+      if (typeof target === "object") {
+        await act(`/sessions/${target.id}`, "DELETE");
+        notice("Session ended.");
+      } else {
+        await act(target === "all" ? "/auth/logout-all" : "/auth/logout");
+        client.clear();
+      }
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setEndingSession(false);
+    }
+  }
   return (
-    <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">YOUR WORKSPACE, PROTECTED</div>
-          <h1>
-            Account & security<span className="heading-dot">.</span>
-          </h1>
-          <p>{user.email}</p>
-        </div>
-        <button onClick={() => logout()}>
-          <LogOut size={16} />
-          Sign out
-        </button>
-      </div>
+    <div className="account-settings">
+      <header className="account-heading">
+        <h1>Account &amp; security</h1>
+        <p>
+          {user.password_enabled
+            ? user.email
+            : "Manage your sign-in and active sessions."}
+        </p>
+      </header>
       {(error || sessions.error) && (
         <p className="error" role="alert">
           {error || message(sessions.error)}
         </p>
       )}
-      <div className="settings-grid">
-        {!user.password_enabled && (
+      {!user.password_enabled && (
+        <section className="panel account-card">
+          <div className="account-card-info">
+            <span className="account-icon">
+              <ShieldCheck size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h2>Google account</h2>
+              <p className="account-email">{user.email}</p>
+              <p className="account-description">
+                Manage your password and two-step verification in Google.
+              </p>
+            </div>
+          </div>
+          <a
+            className="account-link"
+            href="https://myaccount.google.com/security"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Manage Google security <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
+        </section>
+      )}
+      {user.password_enabled && (
+        <div className="settings-grid">
           <section className="panel settings-panel">
             <ShieldCheck size={26} />
-            <h2>Google account</h2>
+            <h2>Two-factor authentication</h2>
             <p>
-              You sign in with Google. Manage your password and two-step
-              verification in your Google Account.
+              {user.mfa_enabled
+                ? "An authenticator or recovery code is required when you sign in."
+                : "Add an authenticator to protect your account."}
             </p>
-            <a
-              href="https://myaccount.google.com/security"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Manage Google security <ArrowUpRight size={16} />
-            </a>
-          </section>
-        )}
-        {user.password_enabled && (
-          <>
-            <section className="panel settings-panel">
-              <ShieldCheck size={26} />
-              <h2>Two-factor authentication</h2>
-              <p>
-                {user.mfa_enabled
-                  ? "An authenticator or recovery code is required when you sign in."
-                  : "Add an authenticator to protect your account."}
-              </p>
-              <Badge
-                state={user.mfa_enabled ? "UP" : "UNKNOWN"}
-                label={user.mfa_enabled ? "Enabled" : "Not set up"}
-              />
-              {!user.mfa_enabled && !enrollment && (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    try {
-                      const password = new FormData(e.currentTarget).get(
-                        "password",
-                      );
-                      const r = await api<{ secret: string; uri: string }>(
-                        "/auth/mfa/enroll",
-                        "POST",
-                        { password },
-                      );
-                      setEnrollment({
-                        ...r,
-                        qr: await QRCode.toDataURL(r.uri),
-                      });
-                    } catch (e) {
-                      setError(message(e));
-                    }
-                  }}
-                >
-                  <Field label="Current password">
-                    <input
-                      name="password"
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                    />
-                  </Field>
-                  <button className="primary">Set up authenticator</button>
-                </form>
-              )}
-              {enrollment && (
-                <>
-                  <p>
-                    Scan this QR code with your authenticator, or enter the
-                    secret manually.
-                  </p>
-                  <Image
-                    unoptimized
-                    className="qr"
-                    src={enrollment.qr}
-                    width={180}
-                    height={180}
-                    alt="Authenticator enrollment QR code"
-                  />
-                  <code className="secret">{enrollment.secret}</code>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      try {
-                        const code = new FormData(e.currentTarget).get("code");
-                        const r = await api<{ recovery_codes: string[] }>(
-                          "/auth/mfa/confirm",
-                          "POST",
-                          { code },
-                        );
-                        setCodes(r.recovery_codes);
-                        setEnrollment(null);
-                        await client.invalidateQueries();
-                      } catch (e) {
-                        setError(message(e));
-                      }
-                    }}
-                  >
-                    <Field label="Six-digit authenticator code">
-                      <input
-                        name="code"
-                        inputMode="numeric"
-                        pattern="[0-9]{6}"
-                        autoComplete="one-time-code"
-                        required
-                      />
-                    </Field>
-                    <button className="primary">Confirm enrollment</button>
-                  </form>
-                </>
-              )}
-              {user.mfa_enabled && (
-                <div className="button-group">
-                  <button onClick={() => setManage("recovery-codes")}>
-                    Replace recovery codes
-                  </button>
-                  <button
-                    className="danger"
-                    onClick={() => setManage("disable")}
-                  >
-                    Disable MFA
-                  </button>
-                </div>
-              )}
-            </section>
-            <section className="panel settings-panel">
-              <h2>Change password</h2>
-              <p>
-                Changing your password revokes all sessions, including this one.
-              </p>
+            <Badge
+              state={user.mfa_enabled ? "UP" : "UNKNOWN"}
+              label={user.mfa_enabled ? "Enabled" : "Not set up"}
+            />
+            {!user.mfa_enabled && !enrollment && (
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
-                    await act(
-                      "/auth/password",
-                      "POST",
-                      Object.fromEntries(new FormData(e.currentTarget)),
+                    const password = new FormData(e.currentTarget).get(
+                      "password",
                     );
-                    client.clear();
+                    const r = await api<{ secret: string; uri: string }>(
+                      "/auth/mfa/enroll",
+                      "POST",
+                      { password },
+                    );
+                    setEnrollment({
+                      ...r,
+                      qr: await QRCode.toDataURL(r.uri),
+                    });
                   } catch (e) {
                     setError(message(e));
                   }
@@ -2039,65 +1971,207 @@ function Account({
                     required
                   />
                 </Field>
-                <Field label="New password (12+ characters)">
-                  <input
-                    name="new_password"
-                    type="password"
-                    autoComplete="new-password"
-                    minLength={12}
-                    required
-                  />
-                </Field>
-                {user.mfa_enabled && (
-                  <Field label="Authenticator or recovery code">
-                    <input name="code" autoComplete="one-time-code" required />
-                  </Field>
-                )}
-                <button>Update password</button>
+                <button className="primary">Set up authenticator</button>
               </form>
-            </section>
-          </>
-        )}
-      </div>
-      <section className="panel">
-        <div className="panel-toolbar">
-          <h2>Active sessions</h2>
-          <button className="danger" onClick={() => logout(true)}>
+            )}
+            {enrollment && (
+              <>
+                <p>
+                  Scan this QR code with your authenticator, or enter the secret
+                  manually.
+                </p>
+                <Image
+                  unoptimized
+                  className="qr"
+                  src={enrollment.qr}
+                  width={180}
+                  height={180}
+                  alt="Authenticator enrollment QR code"
+                />
+                <code className="secret">{enrollment.secret}</code>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      const code = new FormData(e.currentTarget).get("code");
+                      const r = await api<{ recovery_codes: string[] }>(
+                        "/auth/mfa/confirm",
+                        "POST",
+                        { code },
+                      );
+                      setCodes(r.recovery_codes);
+                      setEnrollment(null);
+                      await client.invalidateQueries();
+                    } catch (e) {
+                      setError(message(e));
+                    }
+                  }}
+                >
+                  <Field label="Six-digit authenticator code">
+                    <input
+                      name="code"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      autoComplete="one-time-code"
+                      required
+                    />
+                  </Field>
+                  <button className="primary">Confirm enrollment</button>
+                </form>
+              </>
+            )}
+            {user.mfa_enabled && (
+              <div className="button-group">
+                <button onClick={() => setManage("recovery-codes")}>
+                  Replace recovery codes
+                </button>
+                <button className="danger" onClick={() => setManage("disable")}>
+                  Disable MFA
+                </button>
+              </div>
+            )}
+          </section>
+          <section className="panel settings-panel">
+            <h2>Change password</h2>
+            <p>
+              Changing your password revokes all sessions, including this one.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  await act(
+                    "/auth/password",
+                    "POST",
+                    Object.fromEntries(new FormData(e.currentTarget)),
+                  );
+                  client.clear();
+                } catch (e) {
+                  setError(message(e));
+                }
+              }}
+            >
+              <Field label="Current password">
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+              <Field label="New password (12+ characters)">
+                <input
+                  name="new_password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  required
+                />
+              </Field>
+              {user.mfa_enabled && (
+                <Field label="Authenticator or recovery code">
+                  <input name="code" autoComplete="one-time-code" required />
+                </Field>
+              )}
+              <button>Update password</button>
+            </form>
+          </section>
+        </div>
+      )}
+      <section className="panel account-sessions">
+        <div className="account-sessions-heading">
+          <div>
+            <h2>Active sessions</h2>
+            <p className="account-description">
+              See where you’re signed in to PulseGrid.
+            </p>
+          </div>
+          <button
+            ref={signOutEverywhere}
+            className="danger"
+            disabled={endingSession}
+            onClick={() => setConfirmSignOut(true)}
+          >
             Sign out everywhere
           </button>
         </div>
-        {sessions.data?.map((s) => (
-          <div className="session-row" key={s.id}>
-            <div>
-              <strong>{s.current ? "This browser" : s.label}</strong>
-              <p className="hint">
-                Created {stamp(s.created_at)} · Active {stamp(s.last_activity)}
-              </p>
+        <ul className="session-list">
+          <li className="session-row">
+            <div className="account-card-info">
+              <span className="account-icon">
+                <Laptop size={19} aria-hidden="true" />
+              </span>
+              <div>
+                <div className="session-title">
+                  <strong>This browser</strong>
+                  <span className="session-current">Current session</span>
+                </div>
+                {currentSession && (
+                  <p className="account-description">
+                    Last active {stamp(currentSession.last_activity)}
+                  </p>
+                )}
+              </div>
             </div>
             <button
+              disabled={endingSession}
+              onClick={() => void endSession("current")}
+            >
+              <LogOut size={15} aria-hidden="true" />
+              Sign out
+            </button>
+          </li>
+          {otherSessions?.map((session) => (
+            <li className="session-row" key={session.id}>
+              <div className="account-card-info">
+                <span className="account-icon">
+                  <Laptop size={19} aria-hidden="true" />
+                </span>
+                <div>
+                  <strong>{session.label || "Other browser"}</strong>
+                  <p className="account-description">
+                    Last active {stamp(session.last_activity)}
+                  </p>
+                </div>
+              </div>
+              <button
+                disabled={endingSession}
+                onClick={() => void endSession(session)}
+              >
+                End session
+              </button>
+            </li>
+          ))}
+        </ul>
+        {sessions.isPending && (
+          <p className="account-session-note" role="status">
+            Loading other sessions…
+          </p>
+        )}
+        {sessions.data && !otherSessions?.length && (
+          <p className="account-session-note">No other active sessions.</p>
+        )}
+      </section>
+      {confirmSignOut && (
+        <Modal title="Sign out everywhere?" close={closeSignOut}>
+          <p>
+            This ends every PulseGrid session, including this browser. You’ll
+            need to sign in again.
+          </p>
+          <div className="account-dialog-actions">
+            <button onClick={closeSignOut}>Cancel</button>
+            <button
+              className="danger"
               onClick={() => {
-                void act(`/sessions/${s.id}`, "DELETE")
-                  .then(() => {
-                    notice("Session revoked.");
-                    if (s.current) client.clear();
-                  })
-                  .catch((e) => setError(message(e)));
+                closeSignOut();
+                void endSession("all");
               }}
             >
-              Revoke
+              Sign out everywhere
             </button>
           </div>
-        ))}
-      </section>
-      <div className="definitions">
-        <strong>Session refresh policy</strong>
-        <p>
-          Browser tabs coordinate refreshes with Web Locks. Reusing a refresh
-          token revokes its entire session immediately. If a refresh response is
-          lost, signing in again may be required. Passwords and tokens stay out
-          of browser local storage.
-        </p>
-      </div>
+        </Modal>
+      )}
       {manage && (
         <Modal
           title={
@@ -2172,6 +2246,6 @@ function Account({
           <button onClick={() => setCodes([])}>I have saved these</button>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

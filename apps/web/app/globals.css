@@ -8,6 +8,8 @@
   --accent: #4e662f;
   --pale: #edf2e5;
   --red: #b75c4b;
+  --sidebar-width: 242px;
+  --page-gutter: 39px;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--ink);
   font-size: 14px;
@@ -18,6 +20,16 @@
 body {
   margin: 0;
   background: var(--bg);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.site-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 button,
 input,
@@ -154,12 +166,12 @@ p {
 }
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  flex: 1;
 }
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 242px;
+  width: var(--sidebar-width);
   border-right: 1px solid var(--line);
   background: #fcfdf9;
   display: flex;
@@ -307,7 +319,7 @@ p {
   white-space: nowrap;
 }
 .main {
-  margin-left: 242px;
+  margin-left: var(--sidebar-width);
   flex: 1;
   min-width: 0;
 }
@@ -347,7 +359,7 @@ p {
 }
 .content {
   max-width: 1500px;
-  padding: 37px 39px 0;
+  padding: 37px var(--page-gutter) 28px;
   margin: 0 auto;
 }
 .page-heading {
@@ -719,15 +731,26 @@ tr:last-child td {
   margin: 2px 0 30px;
 }
 .page-footer {
-  display: flex;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  color: #a5ac9c;
-  font-size: 9px;
-  padding: 23px 0;
-  margin-top: 36px;
+  flex-shrink: 0;
+  padding-inline: var(--page-gutter);
 }
-.page-footer > span:first-child {
+.site-content:has(.app-shell) + .page-footer {
+  margin-inline-start: var(--sidebar-width);
+}
+.page-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  border-top: 1px solid var(--line);
+  color: #6b755f;
+  font-size: 11px;
+  max-width: calc(1500px - 2 * var(--page-gutter));
+  margin-inline: auto;
+  padding: 20px 0;
+}
+.page-footer-inner > span:first-child {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -909,24 +932,98 @@ tr:last-child td {
 .settings-panel > .button-group {
   margin-top: 20px;
 }
+.account-settings {
+  max-width: 880px;
+  margin-inline: auto;
+}
+.account-heading {
+  margin-bottom: 24px;
+}
+.account-heading p {
+  margin-top: 6px;
+  color: #657059;
+}
+.account-card,
+.account-sessions-heading,
 .session-row {
-  padding: 20px;
+  padding: 18px 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--line);
   gap: 14px;
+  flex-wrap: wrap;
 }
-.session-row strong {
-  font-size: 12px;
+.account-card-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 220px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
-.session-row .hint {
-  margin: 5px 0;
-  font-size: 10px;
+.account-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--pale);
+  color: var(--accent);
 }
-.session-row button {
+.account-email {
+  margin-top: 3px;
+}
+.account-description {
+  margin-top: 4px;
+  color: #657059;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.account-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 600;
+  padding-block: 8px;
+}
+.account-link:hover {
+  text-decoration: underline;
+}
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.session-row {
+  border-top: 1px solid var(--line);
+}
+.session-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.session-current {
+  border-radius: 12px;
+  padding: 2px 8px;
+  background: var(--pale);
+  color: var(--accent);
   font-size: 11px;
+}
+.account-session-note {
+  padding: 12px 22px;
+  border-top: 1px solid var(--line);
+  color: #657059;
+  font-size: 12px;
+}
+.account-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 .qr {
   display: block;
@@ -982,7 +1079,7 @@ tr:last-child td {
   margin-top: 4px;
 }
 .login {
-  min-height: 100vh;
+  flex: 1;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   background: #fcfdf9;
@@ -1090,7 +1187,7 @@ tr:last-child td {
   margin-top: 25px;
 }
 .loading {
-  min-height: 100vh;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1117,16 +1214,16 @@ tr:last-child td {
   }
 }
 @media (max-width: 1150px) {
+  :root {
+    --sidebar-width: 210px;
+    --page-gutter: 25px;
+  }
   .sidebar {
-    width: 210px;
     padding-left: 15px;
     padding-right: 15px;
   }
-  .main {
-    margin-left: 210px;
-  }
   .content {
-    padding: 28px 25px 0;
+    padding-top: 28px;
   }
   .topbar {
     padding: 0 25px;
@@ -1157,8 +1254,11 @@ tr:last-child td {
   }
 }
 @media (max-width: 800px) {
+  :root {
+    --sidebar-width: 74px;
+    --page-gutter: 18px;
+  }
   .sidebar {
-    width: 74px;
     padding: 22px 10px 0;
   }
   .sidebar .brand {
@@ -1193,11 +1293,8 @@ tr:last-child td {
   .sidebar nav button .truncate {
     display: none;
   }
-  .main {
-    margin-left: 74px;
-  }
   .content {
-    padding: 25px 18px 0;
+    padding-top: 25px;
   }
   .topbar {
     padding: 0 18px;
@@ -1249,11 +1346,11 @@ tr:last-child td {
     grid-template-columns: 1fr;
     gap: 0;
   }
-  .page-footer > span:last-child {
-    display: none;
+  .site-content:has(.simple-shell) + .page-footer {
+    margin-inline-start: 0;
   }
   .login {
-    display: block;
+    display: flex;
   }
   .login-art {
     display: none;
@@ -1261,7 +1358,7 @@ tr:last-child td {
   .login-form {
     padding: 35px 28px;
     margin: 0 auto;
-    min-height: 100vh;
+    align-self: stretch;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -1280,14 +1377,15 @@ tr:last-child td {
   .button-group button {
     font-size: 10px;
   }
-  .session-row {
-    align-items: flex-start;
+  .account-card,
+  .account-sessions-heading,
+  .session-row,
+  .account-session-note {
+    padding-inline: 16px;
   }
-  .session-row > div {
-    min-width: 0;
-  }
-  .session-row strong {
-    font-size: 10px;
+  .account-card .account-link,
+  .session-row button {
+    margin-inline-start: 48px;
   }
   .content .footnote {
     font-size: 9px;
@@ -1471,6 +1569,42 @@ tr:last-child td {
 .service-more .chart-panel {
   margin-bottom: 24px;
 }
+.service-back {
+  margin-bottom: 14px;
+}
+.service-heading {
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.service-history-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.metric-window {
+  position: relative;
+  max-width: 100%;
+}
+.metric-window select {
+  appearance: none;
+  cursor: pointer;
+  max-width: 100%;
+  padding: 10px 36px 10px 14px;
+}
+.metric-window svg {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #6b7b57;
+}
+.history-panel-heading {
+  padding: 18px 20px 16px;
+}
+.history-panel-heading .hint {
+  margin: 6px 0 0;
+}
 @media (max-width: 1100px) {
   .service-row {
     grid-template-columns: minmax(0, 1fr) 130px 65px;
@@ -1529,7 +1663,7 @@ tr:last-child td {
     display: none;
   }
   .simple-shell .content {
-    padding: 28px 18px 0;
+    padding-top: 28px;
   }
   .simple-shell .page-heading p {
     font-size: 12px;
@@ -1590,5 +1724,8 @@ tr:last-child td {
   }
   .advanced > summary {
     padding: 17px 15px;
+  }
+  .history-panel-heading {
+    padding-inline: 14px;
   }
 }
