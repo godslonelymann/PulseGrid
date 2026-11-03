@@ -1546,6 +1546,10 @@ tr:last-child td {
 .email-alerts {
   padding: 28px;
 }
+.delivery-test {
+  padding: 16px 20px;
+  overflow-wrap: anywhere;
+}
 .email-heading {
   display: flex;
   gap: 16px;
@@ -1575,6 +1579,16 @@ tr:last-child td {
 .service-heading {
   flex-wrap: wrap;
   margin-bottom: 14px;
+}
+.service-status-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: inherit;
+  max-width: 100%;
+}
+.service-status-controls .badge {
+  justify-content: center;
+  border-radius: 7px;
 }
 .service-history-heading {
   flex-wrap: wrap;

@@ -34,6 +34,8 @@ from pulsegrid.storage.models import (
 from pulsegrid.worker.probe import SafeTransport, probe, validate_url
 
 cfg = settings()
+EXTERNAL_HEARTBEAT_INTERVAL = 60
+MAX_CHECK_OVERDUE = timedelta(minutes=2)
 
 
 def log(event, **fields):
@@ -335,6 +337,27 @@ async def retention(stop):
             await asyncio.sleep(1)
 
 
+async def send_external_heartbeat(client, url):
+    try:
+        # A live scheduler alone does not prove it is recording checks.
+        async with Session() as s:
+            overdue = await s.scalar(
+                select(Runtime.id)
+                .join(Monitor)
+                .where(~Monitor.paused, Monitor.archived_at.is_(None), Runtime.due_at < now() - MAX_CHECK_OVERDUE)
+                .limit(1)
+            )
+        if overdue:
+            log("external_heartbeat_skipped", reason="overdue_checks")
+            return
+        async with asyncio.timeout(5), client.stream("GET", url) as response:
+            if not response.is_success:
+                log("external_heartbeat_rejected", status=response.status_code)
+    except Exception as exc:
+        # Request URLs contain a secret. Do not log the URL or exception message.
+        log("external_heartbeat_unavailable", error_type=type(exc).__name__)
+
+
 async def main():
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -344,6 +367,10 @@ async def main():
     target_slots = defaultdict(lambda: asyncio.Semaphore(2))
     tasks = set()
     background = [asyncio.create_task(notifications(stop)), asyncio.create_task(retention(stop))]
+    heartbeat_url = cfg.worker_heartbeat_url.get_secret_value()
+    heartbeat_client = httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=5) if heartbeat_url else None
+    heartbeat_task = None
+    next_ping = loop.time()
     log("worker_started", worker_id=worker_id, concurrency=cfg.worker_concurrency)
     try:
         while not stop.is_set():
@@ -365,14 +392,25 @@ async def main():
                             index_elements=[Heartbeat.id], set_={"seen_at": now(), "inflight": len(tasks)}
                         )
                     )
+                if (
+                    heartbeat_client is not None
+                    and loop.time() >= next_ping
+                    and (heartbeat_task is None or heartbeat_task.done())
+                ):
+                    next_ping = loop.time() + EXTERNAL_HEARTBEAT_INTERVAL
+                    heartbeat_task = asyncio.create_task(send_external_heartbeat(heartbeat_client, heartbeat_url))
             except Exception as exc:
                 log("scheduler_unavailable", error_type=type(exc).__name__)
                 await asyncio.sleep(1)
             await asyncio.sleep(0.2)
     finally:
+        if heartbeat_task is not None:
+            background.append(heartbeat_task)
         for t in background:
             t.cancel()
         await asyncio.gather(*background, return_exceptions=True)
+        if heartbeat_client is not None:
+            await heartbeat_client.aclose()
         # Graceful shutdown drains bounded work; SIGKILL is recovered by lease expiry.
         await asyncio.gather(*tasks, return_exceptions=True)
         log("worker_stopped", worker_id=worker_id)

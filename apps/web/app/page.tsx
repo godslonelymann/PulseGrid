@@ -101,6 +101,8 @@ type Metrics = {
   p95_ms: number | null;
   p99_ms: number | null;
   histogram: { range: string; count: number }[];
+  latency_bucket_seconds: number;
+  latency_trend: { starts_at: string; median_ms: number | null }[];
 };
 type Channel = {
   id: string;
@@ -118,6 +120,7 @@ type Delivery = {
   exhausted: boolean;
   last_error: string | null;
   next_attempt: string;
+  test_queued_at: string | null;
 };
 type BrowserSession = {
   id: string;
@@ -508,15 +511,18 @@ function Dashboard({ user }: { user: User }) {
   const [editing, setEditing] = useState<Monitor | undefined>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const data = useData<{ monitors: Monitor[]; counts: Record<string, number> }>(
-    "dashboard",
-    showArchived ? "/dashboard?archived=true" : "/dashboard",
-  );
+  const data = useData<{
+    monitors: Monitor[];
+    monitor_total: number;
+    limit: number;
+  }>("dashboard", showArchived ? "/dashboard?archived=true" : "/dashboard");
   const worker = useData<{ workers: { id: string; stale: boolean }[] }>(
     "worker",
     "/worker-status",
   );
   const monitors = data.data?.monitors || [];
+  const atMonitorLimit =
+    !!data.data && data.data.monitor_total >= data.data.limit;
   const online = worker.data?.workers.some((w) => !w.stale);
   const problems = monitors.filter(
     (m) => m.state === "DOWN" || m.state === "SUSPECT",
@@ -704,11 +710,22 @@ function Dashboard({ user }: { user: User }) {
                     ? "Show active services"
                     : "Show archived services"}
                 </button>
-                <button className="primary" onClick={openService}>
+                <button
+                  className="primary"
+                  onClick={openService}
+                  disabled={atMonitorLimit}
+                >
                   <Plus size={17} />
                   Add service
                 </button>
               </div>
+              {atMonitorLimit && (
+                <p className="notice" role="status">
+                  You’ve reached the {data.data?.limit}-service limit. Paused
+                  and archived services count toward the limit. Delete a service
+                  to add another.
+                </p>
+              )}
               <div
                 className={`status-banner ${problems || (monitors.length && worker.data && !online) ? "needs-attention" : ""}`}
                 role="status"
@@ -771,7 +788,7 @@ function Dashboard({ user }: { user: User }) {
                         ? "Try another search."
                         : "Paste your website or API URL to start."}
                     </p>
-                    {!search && (
+                    {!search && !atMonitorLimit && (
                       <button className="primary" onClick={openService}>
                         <Plus size={16} />
                         Add your first service
@@ -1009,6 +1026,8 @@ function MonitorForm({
     </Modal>
   );
 }
+const CHECKS_PER_PAGE = 10;
+
 function MonitorDetail({
   monitor: m,
   back,
@@ -1023,11 +1042,11 @@ function MonitorDetail({
   remove: () => void;
 }) {
   const [hours, setHours] = useState(24);
-  const [offset, setOffset] = useState(0);
+  const [checkPage, setCheckPage] = useState(0);
   const [incidentOffset, setIncidentOffset] = useState(0);
-  const results = useData<Result[]>(
+  const checks = useData<Result[]>(
     "results",
-    `/monitors/${m.id}/results?hours=${hours}&offset=${offset}`,
+    `/monitors/${m.id}/results?hours=${hours}&limit=${CHECKS_PER_PAGE + 1}&offset=${checkPage * CHECKS_PER_PAGE}`,
   );
   const metrics = useData<Metrics>(
     "metrics",
@@ -1050,7 +1069,13 @@ function MonitorDetail({
     }[]
   >("versions", `/monitors/${m.id}/versions`);
   const stats = metrics.data;
-  const rows = results.data || [];
+  const windowEnd = stats ? Date.parse(stats.window_end) : 0;
+  const trend = stats?.latency_trend.map((bucket) => ({
+    time: Date.parse(bucket.starts_at),
+    latency: bucket.median_ms,
+  }));
+  const rows = checks.data?.slice(0, CHECKS_PER_PAGE) ?? [];
+  const hasMoreChecks = (checks.data?.length ?? 0) > CHECKS_PER_PAGE;
   return (
     <>
       <button className="text-button service-back" onClick={back}>
@@ -1063,18 +1088,20 @@ function MonitorDetail({
           <p>{m.url}</p>
         </div>
         <div className="button-group">
-          <Badge state={m.state} />
-          <button
-            disabled={!!m.archived_at}
-            onClick={() =>
-              action(
-                `/monitors/${m.id}/${m.state === "PAUSED" ? "resume" : "pause"}`,
-              )
-            }
-          >
-            {m.state === "PAUSED" ? <Play size={15} /> : <Pause size={15} />}{" "}
-            {m.state === "PAUSED" ? "Resume" : "Pause"}
-          </button>
+          <div className="service-status-controls">
+            <Badge state={m.state} />
+            <button
+              disabled={!!m.archived_at}
+              onClick={() =>
+                action(
+                  `/monitors/${m.id}/${m.state === "PAUSED" ? "resume" : "pause"}`,
+                )
+              }
+            >
+              {m.state === "PAUSED" ? <Play size={15} /> : <Pause size={15} />}{" "}
+              {m.state === "PAUSED" ? "Resume" : "Pause"}
+            </button>
+          </div>
           {!m.archived_at && <button onClick={edit}>Edit service</button>}
           <button
             onClick={() =>
@@ -1108,7 +1135,7 @@ function MonitorDetail({
             value={hours}
             onChange={(e) => {
               setHours(Number(e.target.value));
-              setOffset(0);
+              setCheckPage(0);
             }}
           >
             <option value={1}>Last hour</option>
@@ -1119,9 +1146,9 @@ function MonitorDetail({
           <ChevronDown size={16} aria-hidden="true" />
         </div>
       </div>
-      {(results.error || metrics.error || incidents.error) && (
+      {(metrics.error || incidents.error) && (
         <p className="error" role="alert">
-          {message(results.error || metrics.error || incidents.error)}
+          {message(metrics.error || incidents.error)}
         </p>
       )}
       <div className="stat-grid simple-metrics">
@@ -1139,47 +1166,81 @@ function MonitorDetail({
       <section className="panel chart-panel">
         <h2>Response time</h2>
         <p className="hint">
-          Time until the service starts responding ·{" "}
-          {offset ? "selected check page" : "latest checks"}
+          Median time to response headers for successful checks
+          {stats &&
+            ` · per ${
+              stats.latency_bucket_seconds >= 3600
+                ? `${stats.latency_bucket_seconds / 3600} hr`
+                : `${stats.latency_bucket_seconds / 60} min`
+            }`}
         </p>
-        <div className="chart">
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-            initialDimension={{ width: 400, height: 230 }}
-            minWidth={0}
-          >
-            <AreaChart
-              data={[...rows].reverse().map((r) => ({
-                time: new Date(r.observed_at).toLocaleTimeString(),
-                latency: r.success ? r.latency_ms : null,
-              }))}
+        {metrics.isPending ? (
+          <Empty>Loading response times…</Empty>
+        ) : metrics.error ? (
+          <Empty>Response times are unavailable.</Empty>
+        ) : !trend?.some((point) => point.latency != null) ? (
+          <Empty>
+            No successful checks with response times in this period.
+          </Empty>
+        ) : (
+          <div className="chart">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={{ width: 400, height: 230 }}
+              minWidth={0}
             >
-              <defs>
-                <linearGradient id="latency" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#718554" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#718554" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-                stroke="#eceee7"
-              />
-              <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={55} />
-              <YAxis tick={{ fontSize: 11 }} unit="ms" />
-              <Tooltip />
-              <Area
-                isAnimationActive={false}
-                dataKey="latency"
-                name="Time to headers (ms)"
-                stroke="#667d46"
-                fill="url(#latency)"
-                connectNulls={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+              <AreaChart data={trend}>
+                <defs>
+                  <linearGradient id="latency" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#718554" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#718554" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#eceee7"
+                />
+                <XAxis
+                  dataKey="time"
+                  type="number"
+                  scale="time"
+                  domain={[windowEnd - hours * 3600_000, windowEnd]}
+                  tickFormatter={(value: number) =>
+                    hours > 24
+                      ? new Date(value).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : new Date(value).toLocaleTimeString(undefined, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
+                  }
+                  tick={{ fontSize: 11 }}
+                  minTickGap={24}
+                />
+                <YAxis tick={{ fontSize: 11 }} unit="ms" />
+                <Tooltip
+                  labelFormatter={(value) =>
+                    new Date(Number(value)).toLocaleString()
+                  }
+                  formatter={(value) => ms(Number(value))}
+                />
+                <Area
+                  isAnimationActive={false}
+                  dataKey="latency"
+                  name="Median response time"
+                  stroke="#667d46"
+                  fill="url(#latency)"
+                  connectNulls={false}
+                  dot={{ r: 1.5, fill: "#667d46", strokeWidth: 0 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
       {stats?.retention_clipped && (
         <p className="notice" role="status">
@@ -1390,22 +1451,30 @@ function MonitorDetail({
                 </tbody>
               </table>
             </div>
-            {!rows.length && <Empty>No completed checks in this window.</Empty>}
-            <div className="pagination">
+            {checks.isPending ? (
+              <Empty>Loading checks…</Empty>
+            ) : checks.error ? (
+              <Empty>Recent checks are unavailable.</Empty>
+            ) : !rows.length ? (
+              <Empty>No completed checks on this page.</Empty>
+            ) : null}
+            <nav className="pagination" aria-label="Recent checks pagination">
               <button
-                disabled={!offset}
-                onClick={() => setOffset(Math.max(0, offset - 100))}
+                disabled={checkPage === 0}
+                onClick={() => setCheckPage((page) => Math.max(0, page - 1))}
               >
                 Previous
               </button>
-              <span className="muted">Page {offset / 100 + 1}</span>
+              <span className="muted" aria-live="polite">
+                Page {checkPage + 1}
+              </span>
               <button
-                disabled={rows.length < 100}
-                onClick={() => setOffset(offset + 100)}
+                disabled={!hasMoreChecks || !!checks.error}
+                onClick={() => setCheckPage((page) => page + 1)}
               >
                 Next
               </button>
-            </div>
+            </nav>
           </section>
         </div>
       </details>
@@ -1438,9 +1507,7 @@ function EmailAlerts({
     setNotice("");
     try {
       await act(`/notification-channels/${channel.id}/test`);
-      setNotice(
-        "Test email queued. Check delivery history below if it doesn’t arrive.",
-      );
+      setNotice("Test email queued. Follow its status under Delivery status.");
     } catch (e) {
       setError(message(e));
     } finally {
@@ -1545,6 +1612,15 @@ function EmailAlerts({
     </section>
   );
 }
+function deliveryStatus(d: Delivery) {
+  if (d.delivered_at) return "Delivered";
+  if (d.exhausted) return "Failed · retries exhausted";
+  if (d.last_error) return "Failed · retry scheduled";
+  return "Queued";
+}
+
+const FAILED_DELIVERIES_PER_PAGE = 10;
+
 function Notifications({
   act,
   user,
@@ -1555,6 +1631,16 @@ function Notifications({
   const channels = useData<Channel[]>("channels", "/notification-channels");
   const [advanced, setAdvanced] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [failedOffset, setFailedOffset] = useState(0);
+  const tests = useData<Delivery[]>(
+    "deliveries",
+    "/deliveries?event_kind=test&limit=1",
+  );
+  const failed = useData<Delivery[]>(
+    "deliveries",
+    `/deliveries?failed=true&limit=${FAILED_DELIVERIES_PER_PAGE + 1}&offset=${failedOffset}`,
+  );
+  const latestTest = tests.data?.[0];
   const deliveries = useData<Delivery[]>(
     "deliveries",
     `/deliveries?offset=${offset}`,
@@ -1599,6 +1685,121 @@ function Notifications({
         loading={channels.isPending || !!channels.error}
         act={act}
       />
+      <section className="panel" aria-label="Delivery status">
+        <div className="panel-toolbar">
+          <h2>Delivery status</h2>
+        </div>
+        <div className="delivery-test" role="status">
+          <strong>Latest test:</strong>{" "}
+          {tests.error ? (
+            "Test status is unavailable."
+          ) : tests.isPending ? (
+            "Loading…"
+          ) : latestTest ? (
+            <>
+              <span
+                className={
+                  latestTest.delivered_at
+                    ? "success"
+                    : latestTest.last_error
+                      ? "error"
+                      : ""
+                }
+              >
+                {deliveryStatus(latestTest)}
+              </span>
+              {" · "}
+              {channels.data?.find((c) => c.id === latestTest.channel_id)
+                ?.name || "Alert channel"}
+              {latestTest.test_queued_at &&
+                ` · Queued ${stamp(latestTest.test_queued_at)}`}
+              {latestTest.delivered_at &&
+                ` · Delivered ${stamp(latestTest.delivered_at)}`}
+              {latestTest.last_error && (
+                <p className="muted">{latestTest.last_error}</p>
+              )}
+            </>
+          ) : (
+            "No tests sent yet."
+          )}
+        </div>
+        <div className="panel-toolbar">
+          <h2>Failed deliveries</h2>
+        </div>
+        {failed.error ? (
+          <Empty>Failed deliveries are unavailable.</Empty>
+        ) : failed.isPending ? (
+          <Empty>Loading failed deliveries…</Empty>
+        ) : !failed.data?.length ? (
+          <Empty>
+            {failedOffset
+              ? "No more failed deliveries."
+              : "No unresolved delivery failures."}
+          </Empty>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>CHANNEL</th>
+                  <th>EVENT</th>
+                  <th>STATUS</th>
+                  <th>DETAIL</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {failed.data.slice(0, FAILED_DELIVERIES_PER_PAGE).map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      {channels.data?.find((c) => c.id === d.channel_id)
+                        ?.name || "Alert channel"}
+                    </td>
+                    <td>{d.event_kind}</td>
+                    <td className="error">{deliveryStatus(d)}</td>
+                    <td>
+                      {d.last_error}
+                      {!d.exhausted && (
+                        <small className="muted block">
+                          Next attempt: {stamp(d.next_attempt)}
+                        </small>
+                      )}
+                    </td>
+                    <td>
+                      <button onClick={() => run(`/deliveries/${d.id}/retry`)}>
+                        Retry
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {(failedOffset > 0 ||
+          (failed.data?.length ?? 0) > FAILED_DELIVERIES_PER_PAGE) && (
+          <nav className="pagination" aria-label="Failed deliveries pagination">
+            <button
+              disabled={!failedOffset}
+              onClick={() =>
+                setFailedOffset(failedOffset - FAILED_DELIVERIES_PER_PAGE)
+              }
+            >
+              Previous
+            </button>
+            <button
+              disabled={
+                (failed.data?.length ?? 0) <= FAILED_DELIVERIES_PER_PAGE
+              }
+              onClick={() =>
+                setFailedOffset(failedOffset + FAILED_DELIVERIES_PER_PAGE)
+              }
+            >
+              Next
+            </button>
+          </nav>
+        )}
+      </section>
       <details
         className="advanced alert-advanced"
         onToggle={(e) => setAdvanced(e.currentTarget.open)}
@@ -1640,6 +1841,7 @@ function Notifications({
                 </p>
                 <div className="button-group">
                   <button
+                    disabled={!c.enabled}
                     onClick={() => run(`/notification-channels/${c.id}/test`)}
                   >
                     Send test

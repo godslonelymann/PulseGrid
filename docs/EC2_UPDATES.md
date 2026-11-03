@@ -18,8 +18,10 @@ PulseGrid services. There is a short maintenance window during activation.
 It preserves `/etc/pulsegrid/pulsegrid.env`, the existing systemd configuration,
 API port 8100 and Caddy configuration. The Catalogue and Airflow are not restarted.
 If a command fails, inspect its error before restarting services. A failed
-migration is not automatically rolled back. Release backups are local only;
-off-server backups and restore rehearsals remain separate operator work.
+migration is not automatically rolled back. Release rollback copies are local.
+After the update, follow the [operations guide](OPERATIONS.md#health-and-operations)
+to activate the independent HTTPS and worker checks, and
+[install and rehearse the daily encrypted S3 backup](OPERATIONS.md#backup-and-restore).
 
 ## One-time conversion of the existing password account
 

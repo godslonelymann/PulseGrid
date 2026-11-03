@@ -4,6 +4,7 @@ import secrets
 import time
 import uuid
 from datetime import timedelta
+from typing import Literal
 
 import pyotp
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -92,6 +93,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 P = "/api/v1"
+MONITOR_LIMIT = 20
 app.include_router(google_router, prefix=P + "/auth/google", tags=["Google authentication"])
 
 
@@ -447,7 +449,13 @@ async def safe_destination(url):
 @app.post(P + "/monitors", status_code=201, response_model=MonitorOut)
 async def create_monitor(data: MonitorInput, auth=Depends(principal), session: AsyncSession = Depends(db)):
     await safe_destination(data.url)
-    m = Monitor(owner_id=auth[0].id, **data.model_dump())
+    owner_id = auth[0].id
+    # Serialize concurrent creates for this account before counting its monitors.
+    await session.execute(select(User.id).where(User.id == owner_id).with_for_update())
+    total = await session.scalar(select(func.count()).select_from(Monitor).where(Monitor.owner_id == owner_id))
+    if total >= MONITOR_LIMIT:
+        raise HTTPException(409, f"You’ve reached the {MONITOR_LIMIT}-service limit. Delete a service to add another.")
+    m = Monitor(owner_id=owner_id, **data.model_dump())
     session.add(m)
     await session.flush()
     r = Runtime(id=m.id, due_at=now() + timedelta(seconds=secrets.randbelow(5)))
@@ -543,7 +551,10 @@ async def dashboard(archived: bool = False, auth=Depends(principal), session: As
         "counts": {
             state: sum(m["state"] == state for m in ms) for state in ("UP", "SUSPECT", "DOWN", "UNKNOWN", "PAUSED")
         },
-        "limit": 1000,
+        "limit": MONITOR_LIMIT,
+        "monitor_total": await session.scalar(
+            select(func.count()).select_from(Monitor).where(Monitor.owner_id == auth[0].id)
+        ),
     }
 
 
@@ -603,6 +614,26 @@ async def metrics(
     end = now()
     requested_start = end - timedelta(hours=hours)
     start = max(requested_start, end - timedelta(days=cfg.raw_retention_days))
+    # At most 168 points, including empty buckets so gaps stay visible.
+    bucket_seconds = next(size for size in (60, 600, 3600, 21600) if hours * 3600 <= size * 168)
+    step = timedelta(seconds=bucket_seconds)
+    bucket = func.date_bin(step, Check.observed_at, start)
+    latencies = dict(
+        (
+            await session.execute(
+                select(bucket, func.percentile_cont(0.5).within_group(Check.latency_ms))
+                .where(
+                    Check.monitor_id == monitor_id,
+                    Check.observed_at >= start,
+                    Check.observed_at < end,
+                    Check.success,
+                    Check.latency_ms.is_not(None),
+                )
+                .group_by(bucket)
+            )
+        ).all()
+    )
+    bucket_starts = (start + step * i for i in range(math.ceil((end - start) / step)))
     count, success, median, p95, p99 = (
         await session.execute(
             select(
@@ -653,6 +684,8 @@ async def metrics(
         "p95_ms": p95,
         "p99_ms": p99,
         "histogram": histogram,
+        "latency_bucket_seconds": bucket_seconds,
+        "latency_trend": [{"starts_at": at, "median_ms": latencies.get(at)} for at in bucket_starts],
         "latency_definition": "Time to response headers, successful checks only",
         "coverage_definition": "Completed / floor(sum(active seconds / configured interval)); capped at 100% for boundary jitter",
     }
@@ -761,7 +794,9 @@ async def channel_delete(channel_id: uuid.UUID, auth=Depends(principal), session
 
 @app.post(P + "/notification-channels/{channel_id}/test")
 async def channel_test(channel_id: uuid.UUID, auth=Depends(principal), session: AsyncSession = Depends(db)):
-    await owned_channel(session, auth[0].id, channel_id)
+    channel = await owned_channel(session, auth[0].id, channel_id)
+    if not channel.enabled:
+        raise HTTPException(409, "Enable the alert channel before sending a test")
     await rate(f"channel-test:{channel_id}", 5, 60)
     item = Outbox(
         channel_id=channel_id,
@@ -777,17 +812,21 @@ async def channel_test(channel_id: uuid.UUID, auth=Depends(principal), session: 
 async def deliveries(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    event_kind: Literal["outage", "recovery", "test"] | None = None,
+    failed: bool = False,
     auth=Depends(principal),
     session: AsyncSession = Depends(db),
 ):
-    rows = await session.scalars(
-        select(Outbox)
-        .join(Channel)
-        .where(Channel.owner_id == auth[0].id)
-        .order_by(Outbox.next_attempt.desc())
-        .limit(limit)
-        .offset(offset)
+    query = select(Outbox).join(Channel).where(Channel.owner_id == auth[0].id)
+    if event_kind is not None:
+        query = query.where(Outbox.event_kind == event_kind)
+    if failed:
+        query = query.where(Outbox.delivered_at.is_(None), Outbox.last_error.is_not(None))
+    # A retry changes next_attempt. Use the original queue time for latest-test lookup.
+    order = (
+        Outbox.payload["time"].as_string().desc().nulls_last() if event_kind == "test" else Outbox.next_attempt.desc()
     )
+    rows = await session.scalars(query.order_by(order, Outbox.id.desc()).limit(limit).offset(offset))
     return [
         {
             "id": r.id,
@@ -798,6 +837,7 @@ async def deliveries(
             "exhausted": r.exhausted,
             "last_error": r.last_error,
             "next_attempt": r.next_attempt,
+            "test_queued_at": r.payload.get("time") if r.event_kind == "test" else None,
         }
         for r in rows
     ]

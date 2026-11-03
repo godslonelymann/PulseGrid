@@ -1,0 +1,19 @@
+[Unit]
+Description=Encrypt and upload the PulseGrid PostgreSQL backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pulsegrid
+Group=pulsegrid
+WorkingDirectory=/opt/pulsegrid
+Environment=ENV_FILE=/etc/pulsegrid/pulsegrid.env
+Environment=AWS_PAGER=
+ExecStart=/opt/pulsegrid/.venv/bin/python scripts/run-env.py /bin/bash scripts/offsite-backup.sh upload
+TimeoutStartSec=30min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

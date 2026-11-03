@@ -1,8 +1,9 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     session_days: int = Field(default=14, ge=1, le=365)
     worker_concurrency: int = 20
     lease_seconds: int = 60
+    worker_heartbeat_url: SecretStr = SecretStr("")
     private_target_allowlist: str = ""
     raw_retention_days: int = Field(default=30, ge=1, le=3650)
     security_retention_days: int = Field(default=90, ge=1, le=3650)
@@ -45,6 +47,20 @@ class Settings(BaseSettings):
             raise ValueError("Production requires HTTPS PUBLIC_ORIGIN and SECURE_COOKIES=true")
         if self.lease_seconds < 30 or not 1 <= self.worker_concurrency <= 100:
             raise ValueError("Invalid worker capacity or lease")
+        if heartbeat := self.worker_heartbeat_url.get_secret_value():
+            try:
+                url = urlsplit(heartbeat)
+                valid = (
+                    url.scheme == "https"
+                    and url.hostname
+                    and url.port in (None, 443)
+                    and not (url.username or url.password or url.fragment)
+                    and bool(url.path.strip("/"))
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ValueError("WORKER_HEARTBEAT_URL must be an HTTPS ping URL")
         return self
 
 

@@ -102,6 +102,11 @@ class HistogramBin(BaseModel):
     count: int
 
 
+class LatencyBucket(BaseModel):
+    starts_at: datetime
+    median_ms: float | None
+
+
 class MetricsOut(BaseModel):
     window_start: datetime
     window_end: datetime
@@ -117,6 +122,8 @@ class MetricsOut(BaseModel):
     p95_ms: float | None
     p99_ms: float | None
     histogram: list[HistogramBin]
+    latency_bucket_seconds: int
+    latency_trend: list[LatencyBucket]
     latency_definition: str
     coverage_definition: str
 
@@ -166,6 +173,7 @@ class DashboardOut(BaseModel):
     monitors: list[MonitorOut]
     counts: dict[str, int]
     limit: int
+    monitor_total: int
 
 
 class MonitorVersionOut(BaseModel):
@@ -191,3 +199,4 @@ class DeliveryOut(BaseModel):
     exhausted: bool
     last_error: str | None
     next_attempt: datetime
+    test_queued_at: datetime | None

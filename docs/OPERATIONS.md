@@ -52,10 +52,12 @@ API OpenAPI: http://127.0.0.1:8000/api/docs . Browser requests use the Next.js d
 | `CADDY_ADDRESS`, `CADDY_EMAIL` | Public domain/IP and certificate contact. Configure these for Caddy separately from application secrets. |
 | `PRIVATE_TARGET_ALLOWLIST` | Empty by default. Comma-separated exact hostname:port entries for trusted targets only. |
 | `WORKER_CONCURRENCY`, `LEASE_SECONDS` | Default 20 and 60 seconds. Renewal covers queue time. Tune after measuring. |
+| `WORKER_HEARTBEAT_URL` | Optional secret HTTPS ping URL for the external worker check. The worker sends a GET about once a minute. |
 | `ACCESS_SECONDS`, `SESSION_DAYS` | Default five-minute access cookies and 14-day session expiry. |
 | `RAW_RETENTION_DAYS`, `SECURITY_RETENTION_DAYS`, `INCIDENT_RETENTION_DAYS` | Default 30 / 90 / 365. Open incidents are retained. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_STARTTLS` | SMTP provider configuration. Default STARTTLS on port 587 with certificate verification. Missing configuration appears in the UI. |
 | `PG_BIN` | Optional PostgreSQL 17+ binary directory for the service and backup/restore helpers. Use the same major version as an existing profile; upgrading binaries alone does not upgrade database files. |
+| `BACKUP_S3_PREFIX`, `BACKUP_AGE_RECIPIENT` | Private S3 destination (`s3://bucket/prefix`) and the public age recipient for the optional daily backup. |
 
 ## Production deployment
 
@@ -84,7 +86,7 @@ ENV_FILE=/etc/pulsegrid/pulsegrid.env uv run python scripts/run-env.py .venv/bin
 Install the provided service files as an operator:
 
 ```sh
-sudo cp infra/systemd/pulsegrid-*.service /etc/systemd/system/
+sudo cp infra/systemd/pulsegrid-{api,worker,web}.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now pulsegrid-api pulsegrid-worker pulsegrid-web
 ```
@@ -101,11 +103,55 @@ Caddy proxies `/api/*` to `127.0.0.1:8000` and other traffic to `127.0.0.1:3000`
 - `/api/v1/health/ready`: API/PostgreSQL/Redis readiness, 503 on dependency failure.
 - `/api/v1/worker-status`: authenticated worker heartbeat and in-flight work.
 
-Use `systemctl status pulsegrid-api pulsegrid-worker pulsegrid-web` and `journalctl -u pulsegrid-api -u pulsegrid-worker -u caddy -n 100`. An independent observer should alert on readiness failures, worker heartbeat missing for 15 seconds, growing scheduling lag, unknown monitors, exhausted delivery retries, outbox growth and storage pressure. Synchronize the system clock for scheduling and TOTP.
+For a simple outage email, use the **PulseGrid health email** GitHub Actions workflow.
+It checks the production readiness URL every five minutes and emails
+`gaikwadanurag16@gmail.com` when both attempts in a run fail. Each failed
+scheduled run can send an email while the outage continues.
+
+Before pushing the workflow to the default branch, add two repository secrets under
+**Settings → Secrets and variables → Actions**. Set `PULSEGRID_SMTP_USER` to
+the Gmail sender address and `PULSEGRID_SMTP_PASSWORD` to that account's Gmail
+app password. After pushing, run **PulseGrid health email** manually from the
+Actions tab to verify the endpoint check. The workflow runs on GitHub and does
+not require an EC2 deployment.
+
+Set up these checks from accounts outside the PulseGrid host, with a verified operator email address. Their alerts do not depend on PulseGrid SMTP.
+
+1. In an external uptime service such as [UptimeRobot](https://help.uptimerobot.com/en/articles/11358364-how-to-create-your-first-monitor-on-uptimerobot-quick-setup-guide), create HTTPS monitors for the public dashboard (`PUBLIC_ORIGIN/`) and API readiness (`PUBLIC_ORIGIN/api/v1/health/ready`). Use GET, expect HTTP 200 and enable downtime and recovery email for both. For the existing EC2 deployment use `https://mypulsegrid.duckdns.org` as the origin.
+2. Create a [Healthchecks.io check](https://healthchecks.io/docs/configuring_checks/) named **PulseGrid worker**, with a 1-minute period, 2-minute grace and an email integration. Put its secret Ping URL in `WORKER_HEARTBEAT_URL` in the server environment file and restart only `pulsegrid-worker`. Confirm the check becomes Up and sees pings about a minute apart.
+3. In staging or during a planned maintenance window, stop only `pulsegrid-worker` long enough to get the missing-heartbeat email. The dashboard and readiness checks should still be Up. Restart the worker and verify recovery. Separately test a downtime and recovery email for the HTTPS monitors against a staging endpoint.
+
+The worker sends a ping only after a successful scheduler iteration and skips it if any unpaused, unarchived monitor is more than two minutes overdue. An empty schedule can still be healthy. The app's internal worker status uses a separate 15-second threshold. Use `journalctl -u pulsegrid-api -u pulsegrid-worker -u caddy -n 100` to investigate. Synchronize the system clock for scheduling and TOTP.
+
+The main **Alerts** screen shows the latest test and unresolved delivery failures, including retries. **Delivered** means the configured provider accepted the notification. Each account can save 20 services; paused and archived services count, and permanent deletion frees a slot.
 
 ## Backup and restore
 
-Backups use native `pg_dump`, validate the archive with `pg_restore --list`, and write SHA-256 checksums. Use tools at least as new as the database server. Encrypt dumps and copy them off-server; store `ENCRYPTION_KEY`, JWT secret, SMTP credentials and environment files securely and separately. A database dump alone cannot decrypt stored secrets. Preserve Caddy's data directory if its certificate/local-CA identity matters.
+The daily backup job runs native `pg_dump`, checks the archive, encrypts it locally with [age](https://github.com/FiloSottile/age), then uploads only the encrypted object to S3. It removes the temporary files after the job. Use PostgreSQL tools at least as new as the database server.
+
+1. Create a private S3 bucket with public access blocked. Set a lifecycle policy for the backup prefix (for example, expire backups after 90 days and abort incomplete multipart uploads). Give the EC2 instance role `s3:PutObject` and `s3:AbortMultipartUpload` for that prefix. Use separate recovery credentials with `s3:GetObject` and listing access for recovery.
+2. On a separate machine, run `age-keygen -o pulsegrid-backup.identity`. Store the identity securely off-server. Set its **public** recipient as `BACKUP_AGE_RECIPIENT`, and set `BACKUP_S3_PREFIX` and the bucket's `AWS_DEFAULT_REGION`, in `/etc/pulsegrid/pulsegrid.env`. Back up the original PulseGrid environment (in particular `ENCRYPTION_KEY`) and the matching source release securely and separately.
+3. Install age and [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) on EC2, available on the system service PATH. From `/opt/pulsegrid`, install the timer and run the first backup:
+
+```sh
+sudo install -m 0644 infra/systemd/pulsegrid-offsite-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start pulsegrid-offsite-backup.service
+sudo journalctl -u pulsegrid-offsite-backup.service -n 30
+sudo systemctl enable --now pulsegrid-offsite-backup.timer
+```
+
+On a separate recovery host with a disposable PostgreSQL cluster, configure its `DATABASE_URL` with a role that has `CREATEDB`, and set the original PulseGrid `ENCRYPTION_KEY`. Download and rehearse the exact uploaded object:
+
+```sh
+ENV_FILE=/secure/pulsegrid-recovery.env .venv/bin/python scripts/run-env.py \
+  bash scripts/offsite-backup.sh rehearse \
+  s3://private-bucket/pulsegrid/pulsegrid-TIMESTAMP.dump.age /secure/pulsegrid-backup.identity
+```
+
+The rehearsal verifies the download, decrypts and restores it into a new temporary database, checks the schema and representative row counts, decrypts stored secrets, verifies credential invalidation and drops the temporary database. It leaves the selected database, Redis and running services alone. Record the S3 object and rehearsal result; repeat after changes to backup tooling, database versions or keys, and periodically check that fresh objects are arriving.
+
+For an actual recovery, download the chosen S3 object with `aws s3 cp --checksum-mode ENABLED`, decrypt it with `age --decrypt --identity /secure/pulsegrid-backup.identity --output pulsegrid-TIMESTAMP.dump pulsegrid-TIMESTAMP.dump.age`, and generate the local checksum with `sha256sum pulsegrid-TIMESTAMP.dump > pulsegrid-TIMESTAMP.dump.sha256`. Keep those files in a private directory. You can also create a local backup for use before a release:
 
 ```sh
 ENV_FILE=/etc/pulsegrid/pulsegrid.env bash scripts/backup.sh /secure/backups
