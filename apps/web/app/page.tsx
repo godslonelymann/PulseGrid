@@ -334,7 +334,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     cancelled: "Google sign-in was cancelled. You can try again.",
     failed: "Google sign-in could not be completed. Please try again.",
     email_exists:
-      "This email already has an account. Contact your administrator for access.",
+      "Contact your administrator to enable Google sign-in for this existing account.",
   };
   const [error, setError] = useState(
     googleErrors[callback.get("google_error") || ""] || "",

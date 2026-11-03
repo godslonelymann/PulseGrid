@@ -11,11 +11,10 @@ uv sync --frozen
 uv run python scripts/init-env.py
 uv run python scripts/native-services.py up dev
 uv run alembic -c apps/api/alembic.ini upgrade head
-PYTHONPATH=apps/api uv run python -m pulsegrid.manage bootstrap you@example.com
 bash scripts/dev.sh
 ```
 
-Open **http://localhost:3000**. Bootstrap prompts for a password twice and refuses a second owner. Google sign-up is optional; see the README. The development script starts PostgreSQL/Redis, applies migrations, and runs the API, worker and frontend. Ctrl-C stops the application processes and retains the database. Stop dependencies separately with `uv run python scripts/native-services.py down dev`.
+Open **http://localhost:3000** after configuring Google credentials as described in the README. Continue with Google creates the account; do not bootstrap a password account. The development script starts PostgreSQL/Redis, applies migrations, and runs the API, worker and frontend. Ctrl-C stops the application processes and retains the database. Stop dependencies separately with `uv run python scripts/native-services.py down dev`.
 
 The helper manages only its own loopback services under ignored `.local-services/PROFILE/`. It refuses occupied ports, retains database files on shutdown, and uses PostgreSQL password authentication for TCP connections. These development profiles have known local passwords and must never serve public production traffic. Never delete a profile directory containing valuable data. Run the helper as a non-root user; `initdb` refuses root.
 
@@ -49,7 +48,7 @@ API OpenAPI: http://127.0.0.1:8000/api/docs . Browser requests use the Next.js d
 | `REDIS_URL` | Development uses `redis://localhost:56379/0`. Production uses a dedicated local/private Redis database. Restore flushes the selected database, so never share it with another application. |
 | `JWT_SECRET` / `ENCRYPTION_KEY` | Random signing secret (32+ characters) / Fernet key; no defaults. Rotating signing keys signs out browsers. Changing encryption keys without re-encryption makes existing secrets unreadable. |
 | `ENVIRONMENT`, `SECURE_COOKIES`, `PUBLIC_ORIGIN` | Production requires HTTPS and Secure cookies. Origin must exactly match the browser URL, including nondefault ports. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google OAuth Web application credentials. Register `PUBLIC_ORIGIN/api/v1/auth/google/callback` exactly. Restart the API after changes. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Required Google OAuth Web application credentials. Register `PUBLIC_ORIGIN/api/v1/auth/google/callback` exactly. Restart the API after changes. |
 | `CADDY_ADDRESS`, `CADDY_EMAIL` | Public domain/IP and certificate contact. Configure these for Caddy separately from application secrets. |
 | `PRIVATE_TARGET_ALLOWLIST` | Empty by default. Comma-separated exact hostname:port entries for trusted targets only. |
 | `WORKER_CONCURRENCY`, `LEASE_SECONDS` | Default 20 and 60 seconds. Renewal covers queue time. Tune after measuring. |
@@ -80,7 +79,6 @@ From `/opt/pulsegrid`, install dependencies and build as the application user:
 uv sync --frozen
 bash scripts/build-web.sh
 ENV_FILE=/etc/pulsegrid/pulsegrid.env uv run python scripts/run-env.py .venv/bin/alembic -c apps/api/alembic.ini upgrade head
-ENV_FILE=/etc/pulsegrid/pulsegrid.env uv run python scripts/run-env.py .venv/bin/python -m pulsegrid.manage bootstrap you@example.com
 ```
 
 Install the provided service files as an operator:
@@ -95,7 +93,7 @@ The three services bind application ports to loopback, run without root, restart
 
 Install `infra/Caddyfile` at `/etc/caddy/Caddyfile`. Create `/etc/caddy/pulsegrid.env` containing only `CADDY_ADDRESS=pulse.example.com` and `CADDY_EMAIL=operator@example.com` (root:caddy, mode 0640). Add a Caddy service drop-in with `[Service]` and `EnvironmentFile=/etc/caddy/pulsegrid.env`. Reload systemd, then enable/restart Caddy using its official package service. Only Caddy should listen publicly on 80/443. Point DNS at the server, keep SSH restricted, and permit the chosen public ports. See [Caddy installation](https://caddyserver.com/docs/install) and [service operation](https://caddyserver.com/docs/running).
 
-Caddy proxies `/api/*` to `127.0.0.1:8000` and other traffic to `127.0.0.1:3000`. Keep production Secure cookies enabled. Verify readiness, sign-in/MFA, monitor creation, fresh checks, history and notification delivery after deploying. A reachable frontend alone does not prove the worker is running.
+Caddy proxies `/api/*` to `127.0.0.1:8000` and other traffic to `127.0.0.1:3000`. Keep production Secure cookies enabled and configure both Google OAuth settings before opening the app. Verify readiness, Google sign-in, monitor creation, fresh checks, history and notification delivery after deploying. A reachable frontend alone does not prove the worker is running.
 
 ## Health and operations
 
@@ -117,7 +115,7 @@ ENV_FILE=/etc/pulsegrid/pulsegrid.env bash scripts/restore.sh /secure/backups/pu
 
 Restore checks the checksum/archive and rejects pre-0005 schema dumps before stopping API/worker through systemd. Restore an old dump with its matching source release before upgrading it. It replaces exactly the database selected by `DATABASE_URL`, revokes restored sessions, deletes recovery codes, fences the current/next TOTP step, clears the selected Redis database, then restarts writers. Failure leaves writers stopped. Review errors before restarting. For manually managed processes, stop every API/worker yourself and add `--writers-stopped`; restart them only after successful restoration. Keep the original encryption key, wait up to 90 seconds for a fresh TOTP and regenerate recovery codes. Restore also rewinds account/password configuration to the backup.
 
-Account recovery: `ENV_FILE=/etc/pulsegrid/pulsegrid.env uv run python scripts/run-env.py .venv/bin/python -m pulsegrid.manage recover you@example.com`. This prompts for a new password, disables lost MFA, deletes recovery codes, revokes sessions and audits recovery.
+Google account recovery is managed through Google. For an existing password account, approve a one-time conversion with `ENV_FILE=/etc/pulsegrid/pulsegrid.env uv run python scripts/run-env.py .venv/bin/python -m pulsegrid.manage allow-google-link you@example.com`, then use Continue with Google within 15 minutes. The old password is removed only after verified Google sign-in; ownership/history and any existing MFA are preserved. Do not leave the verification-only `ENABLE_LEGACY_PASSWORD_AUTH` override enabled in production. See [the existing EC2 update guide](EC2_UPDATES.md) for the shared-server deployment sequence.
 
 ## Local HTTPS staging
 

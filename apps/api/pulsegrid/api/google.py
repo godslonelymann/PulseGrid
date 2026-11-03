@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pulsegrid.auth.google_migration import migrate_password_account
 from pulsegrid.auth.security import audit, cfg, challenge, csrf, digest, issue, rate, redis
 from pulsegrid.storage.db import db
 from pulsegrid.storage.models import User
@@ -149,9 +150,13 @@ async def callback(
 
     user = await session.scalar(select(User).where(User.google_sub == sub).with_for_update())
     if not user:
-        # Email alone never links Google to an existing password account.
-        if await session.scalar(select(User.id).where(User.email == email)):
-            return result(google_error="email_exists")
+        # Email alone never links accounts. A local operator must approve a legacy conversion first.
+        existing = await session.scalar(select(User).where(User.email == email).with_for_update())
+        if existing:
+            if not await migrate_password_account(session, existing, sub):
+                return result(google_error="email_exists")
+            user = existing
+    if not user:
         try:
             async with session.begin_nested():
                 user = User(email=email, google_sub=sub)
@@ -165,6 +170,8 @@ async def callback(
                 return result(google_error="email_exists")
 
     if user.totp_secret:
+        # Persist an approved conversion before issuing a challenge for its new credential version.
+        await session.commit()
         response = result(google_challenge=await challenge(user))
         csrf(response)
         return response

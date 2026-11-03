@@ -77,7 +77,7 @@ from pulsegrid.storage.models import Result as Check
 from pulsegrid.worker.probe import UnsafeURL, resolve, validate_url
 
 app = FastAPI(
-    description="Monitoring API with operator-created password accounts and optional Google sign-up. Protected routes require HttpOnly session cookies. Mutations require an exact Origin and matching X-CSRF-Token/cookie. Unknown and foreign resources both return 404. History uses bounded limit/offset pagination; interval/timeout bounds are described in input schemas. Latency is time to headers; metric windows are clipped to retention.",
+    description="Monitoring API with Google sign-up and sign-in. Protected routes require HttpOnly session cookies. Mutations require an exact Origin and matching X-CSRF-Token/cookie. Unknown and foreign resources both return 404. History uses bounded limit/offset pagination; interval/timeout bounds are described in input schemas. Latency is time to headers; metric windows are clipped to retention.",
     responses={
         401: {"model": ErrorOut, "description": "Missing, expired, revoked, or invalid authentication/factor"},
         403: {"model": ErrorOut, "description": "Origin or CSRF rejected"},
@@ -162,6 +162,8 @@ async def get_csrf(response: Response):
 
 @app.post(P + "/auth/login", response_model=LoginOut, response_model_exclude_none=True)
 async def login(data: Credentials, request: Request, response: Response, session: AsyncSession = Depends(db)):
+    if not cfg.enable_legacy_password_auth:
+        raise HTTPException(403, "Password sign-in is disabled; continue with Google")
     await rate(f"ip:{request.client.host}", 30)
     await rate(f"login:{digest(data.email.lower())}", 10)
     user = await session.scalar(select(User).where(User.email == data.email.lower()))
@@ -236,7 +238,7 @@ async def me(auth=Depends(principal)):
         "id": user.id,
         "email": user.email,
         "mfa_enabled": bool(user.totp_secret),
-        "password_enabled": bool(user.password_hash),
+        "password_enabled": cfg.enable_legacy_password_auth and bool(user.password_hash),
         "google_connected": bool(user.google_sub),
         "session_id": family.id,
     }
@@ -317,6 +319,8 @@ async def enroll(data: Reauth, auth=Depends(principal), session: AsyncSession = 
 
 @app.post(P + "/auth/mfa/confirm", response_model=CodesOut)
 async def confirm(data: ConfirmMFA, auth=Depends(principal), session: AsyncSession = Depends(db)):
+    if not cfg.enable_legacy_password_auth:
+        raise HTTPException(403, "Manage account security through Google")
     await rate(f"enroll-attempt:{auth[1].id}", 5)
     secret = await redis.get(f"enroll:{auth[1].id}")
     if not secret or not pyotp.TOTP(decrypt(secret)).verify(data.code, valid_window=0):

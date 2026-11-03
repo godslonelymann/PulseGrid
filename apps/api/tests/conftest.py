@@ -6,6 +6,8 @@ os.environ["REDIS_URL"] = "redis://localhost:56380/0"
 os.environ["PRIVATE_TARGET_ALLOWLIST"] = "127.0.0.1:18080,127.0.0.1:18081,localhost:18080"
 # Local SMTP fixtures must not inherit the operator's real provider credentials.
 os.environ.update(SMTP_HOST="", SMTP_USER="", SMTP_PASSWORD="", SMTP_FROM="")
+# Existing security regressions exercise legacy credentials only in the isolated test profile.
+os.environ["ENABLE_LEGACY_PASSWORD_AUTH"] = "true"
 
 import httpx
 import pytest_asyncio

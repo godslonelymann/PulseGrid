@@ -154,6 +154,8 @@ async def verify_factor(session, user, code):
 
 
 async def reauthenticate(session, user, password, code):
+    if not cfg.enable_legacy_password_auth:
+        raise HTTPException(403, "Manage account security through Google")
     await rate(f"reauth:{user.id}")
     if not await password_ok(password, user.password_hash) or not await verify_factor(session, user, code):
         raise HTTPException(401, "Reauthentication failed")

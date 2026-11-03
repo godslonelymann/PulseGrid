@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import time
+import uuid
 from types import SimpleNamespace
 from urllib.parse import parse_qs, parse_qsl, urlsplit
 
@@ -11,9 +12,10 @@ import pytest
 from conftest import seed
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pulsegrid.api import google
+from pulsegrid.auth.google_migration import approval_key, authorize_google_migration
 from pulsegrid.auth.security import cfg, redis
 from pulsegrid.storage.db import Session
-from pulsegrid.storage.models import Audit, User
+from pulsegrid.storage.models import Audit, LoginSession, User
 from sqlalchemy import func, select
 from test_auth import enable_mfa
 
@@ -212,3 +214,85 @@ async def test_google_only_accounts_cannot_use_password_endpoints(client, provid
 
 async def test_google_start_requires_csrf(client, provider):
     assert (await client.post("/api/v1/auth/google/start", headers={"x-csrf-token": "wrong"})).status_code == 403
+
+
+async def test_google_only_disables_password_login_and_security_forms(owner, monkeypatch):
+    monkeypatch.setattr(cfg, "enable_legacy_password_auth", False)
+    me = (await owner.get("/api/v1/me")).json()
+    assert me["password_enabled"] is False
+    for path, body in [
+        ("/auth/login", {"email": "owner@example.com", "password": "correct-password-123"}),
+        ("/auth/password", {"password": "correct-password-123", "new_password": "new-password-123"}),
+        ("/auth/mfa/enroll", {"password": "correct-password-123"}),
+        ("/auth/mfa/confirm", {"code": "123456"}),
+    ]:
+        response = await owner.post("/api/v1" + path, json=body)
+        assert response.status_code == 403, response.text
+
+
+async def test_approved_google_migration_preserves_account_and_monitors(owner, provider, monkeypatch):
+    me = (await owner.get("/api/v1/me")).json()
+    created = await owner.post("/api/v1/monitors", json={"url": "http://127.0.0.1:18080/", "name": "Keep history"})
+    assert created.status_code == 201
+    await authorize_google_migration(me["email"])
+    assert 0 < await redis.ttl(approval_key(me["email"])) <= 900
+    monkeypatch.setattr(cfg, "enable_legacy_password_auth", False)
+    state = await begin(owner, provider)
+    provider["claims"]["email"] = me["email"]
+    assert callback_values(await finish(owner, state)) == {"google_success": "1"}
+    signed_in = (await owner.get("/api/v1/me")).json()
+    assert signed_in["id"] == me["id"]
+    assert signed_in["google_connected"] and not signed_in["password_enabled"]
+    assert (await owner.get("/api/v1/monitors/" + created.json()["id"])).status_code == 200
+    assert await redis.get(approval_key(me["email"])) is None
+    async with Session() as session:
+        user = await session.scalar(select(User))
+        assert user.password_hash is None and user.google_sub == "google-user-123"
+        assert await session.scalar(select(func.count()).select_from(User)) == 1
+        old_session = await session.get(LoginSession, uuid.UUID(me["session_id"]))
+        assert old_session.revoked_at is not None
+    # Approval cannot be reused to replace the newly established Google identity.
+    state = await begin(owner, provider)
+    provider["claims"].update(email=me["email"], sub="different-google-account")
+    assert callback_values(await finish(owner, state)) == {"google_error": "email_exists"}
+
+
+@pytest.mark.parametrize("invalidate", ["expired", "credentials_changed", "different_account"])
+async def test_google_migration_requires_current_approval_for_exact_account(client, provider, invalidate):
+    await seed("new.user@gmail.com")
+    await authorize_google_migration("new.user@gmail.com")
+    if invalidate == "expired":
+        await redis.delete(approval_key("new.user@gmail.com"))
+    elif invalidate == "credentials_changed":
+        async with Session.begin() as session:
+            user = await session.scalar(select(User))
+            user.password_hash = "changed-after-approval"
+    else:
+        await seed("other.user@gmail.com")
+    state = await begin(client, provider)
+    if invalidate == "different_account":
+        provider["claims"]["email"] = "other.user@gmail.com"
+    assert callback_values(await finish(client, state)) == {"google_error": "email_exists"}
+    assert (await client.get("/api/v1/me")).status_code == 401
+    async with Session() as session:
+        assert all(user.google_sub is None for user in await session.scalars(select(User)))
+
+
+async def test_google_migration_preserves_existing_mfa(owner, provider, monkeypatch):
+    _, recovery = await enable_mfa(owner)
+    await authorize_google_migration("owner@example.com")
+    monkeypatch.setattr(cfg, "enable_legacy_password_auth", False)
+    state = await begin(owner, provider)
+    provider["claims"]["email"] = "owner@example.com"
+    values = callback_values(await finish(owner, state))
+    assert values["google_challenge"]
+    assert (await owner.get("/api/v1/me")).status_code == 401
+    async with Session() as session:
+        user = await session.scalar(select(User))
+        assert user.totp_secret and user.google_sub == "google-user-123" and user.password_hash is None
+    owner.headers["x-csrf-token"] = owner.cookies["pg_csrf"]
+    response = await owner.post(
+        "/api/v1/auth/verify", json={"challenge": values["google_challenge"], "code": recovery[0]}
+    )
+    assert response.status_code == 200
+    assert (await owner.get("/api/v1/me")).status_code == 200

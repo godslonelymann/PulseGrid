@@ -35,6 +35,11 @@ test("Google button starts authorization and fits desktop and mobile", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeEnabled();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Sign in", exact: true }),
+  ).toHaveCount(0);
   await page.screenshot({
     path: "../../verification/google-signup-desktop.png",
     fullPage: true,
@@ -43,6 +48,8 @@ test("Google button starts authorization and fits desktop and mobile", async ({
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export ENV_FILE=.env.staging
+export ENABLE_LEGACY_PASSWORD_AUTH=true
 uv run python scripts/init-staging.py
 uv run python scripts/native-services.py up staging
 runner=(uv run python scripts/run-env.py)

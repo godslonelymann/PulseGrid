@@ -13,11 +13,10 @@ uv sync --frozen
 uv run python scripts/init-env.py
 uv run python scripts/native-services.py up dev
 uv run alembic -c apps/api/alembic.ini upgrade head
-PYTHONPATH=apps/api uv run python -m pulsegrid.manage bootstrap you@example.com
 bash scripts/dev.sh
 ```
 
-Open **http://localhost:3000**. Bootstrap prompts for your password; no default account exists. Sign in and choose **Add service** on the Dashboard. Paste a public website or API URL; its name is filled in automatically. Password users can enroll an authenticator in Settings and save their recovery codes. Development data persists across restarts.
+Configure Google credentials as described below, then open **http://localhost:3000**. **Continue with Google** creates your account on the first visit and signs you in on later visits. No email/password form or default account exists. Choose **Add service** on the Dashboard and paste a public website or API URL; its name is filled in automatically. Development data persists across restarts.
 
 ## Google sign-up and sign-in
 
@@ -33,13 +32,15 @@ PUBLIC_ORIGIN=http://localhost:3000
 
 Register **`http://localhost:3000/api/v1/auth/google/callback`** as an authorized redirect URI. In production, replace `http://localhost:3000` with the exact HTTPS `PUBLIC_ORIGIN`. The callback is derived from `PUBLIC_ORIGIN`; no frontend secret or extra redirect variable is required.
 
-Run `uv run alembic -c apps/api/alembic.ini upgrade head`, then restart the API (or restart `bash scripts/dev.sh`). **Continue with Google** creates a new account on first use and signs in on later visits. Google sign-up does not require the bootstrap command. Leaving either Google field blank disables the Google button; password sign-in still works.
+Run `uv run alembic -c apps/api/alembic.ini upgrade head`, then restart the API (or restart `bash scripts/dev.sh`). **Continue with Google** creates a new account on first use and signs in on later visits. No bootstrap command is needed. Leaving either Google field blank disables the Google button; configure both before using the app. Password sign-in is disabled by default, including API requests.
 
-Google identities are matched by Google's stable account ID. An existing password account with the same email is not automatically linked; use its password to sign in. Google-only accounts manage their password and two-step verification at Google. Existing PulseGrid MFA remains required for any Google identity whose local account has MFA enabled. Only `openid email` access is requested; Google access/refresh tokens are not stored.
+Google identities are matched by Google's stable account ID. An existing password account with the same email requires a one-time, 15-minute operator approval through `pulsegrid.manage allow-google-link EMAIL`; the next verified Google sign-in converts that account without losing monitors/history. There is no automatic email-based merging. Google accounts manage their password and two-step verification at Google. Existing PulseGrid MFA remains required for converted accounts that already had it enabled. Only `openid email` access is requested; Google access/refresh tokens are not stored.
+
+For the existing shared EC2 installation, see [pulling, deploying and converting the current account](docs/EC2_UPDATES.md). A Git pull alone does not rebuild or restart the running app in `/opt/pulsegrid`.
 
 ## Included workflows
 
-Google sign-up and returning sign-in; Google account security settings; password/TOTP/recovery-code login; MFA enrollment/replacement/disable; password change; session revocation; HTTP GET/HEAD services; editing, pause/resume and confirmed history deletion; current/unknown/paused health; check-based uptime and coverage; time-to-headers charts, percentiles and histograms; persistent incidents; encrypted email/webhook destinations; saved alert coverage; delivery tests, retries and failure history.
+Google sign-up and returning sign-in; Google account security settings; operator-approved conversion of existing password accounts; retained legacy MFA challenges; session revocation; HTTP GET/HEAD services; editing, pause/resume and confirmed history deletion; current/unknown/paused health; check-based uptime and coverage; time-to-headers charts, percentiles and histograms; persistent incidents; encrypted email/webhook destinations; saved alert coverage; delivery tests, retries and failure history.
 
 ## Everyday use
 
