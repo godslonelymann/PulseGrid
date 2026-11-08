@@ -29,11 +29,11 @@
   border-bottom: 1px solid #2a372e;
 }
 .bar {
-  position: relative;
-  height: 72px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 .brand {
   display: flex;
@@ -46,16 +46,15 @@
 }
 .brand svg {
   color: var(--lime);
+  flex-shrink: 0;
 }
-.links,
-.mainNav {
+.links {
   display: flex;
   align-items: center;
   gap: 28px;
   font-size: 14px;
 }
-.mainNav a,
-.links > a:not(.primary) {
+.links > a {
   color: inherit;
   display: flex;
   align-items: center;
@@ -81,9 +80,6 @@
 }
 .primary:hover {
   background: #d5ff92;
-}
-.headerCta {
-  height: 44px;
 }
 .secondary {
   background: transparent;
@@ -122,6 +118,7 @@
 }
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 28px;
 }
@@ -337,6 +334,7 @@
 .play {
   color: var(--cream);
   gap: 6px;
+  min-width: 44px;
   padding-inline: 8px;
 }
 .play span {
@@ -556,7 +554,7 @@
   border-top: 1px solid #d4d8cb;
 }
 .footer .bar {
-  height: 64px;
+  min-height: 64px;
 }
 .footer .brand svg {
   color: #526c3c;
@@ -589,24 +587,19 @@
 }
 @media (max-width: 1023px) {
   .container {
-    width: calc(100% - 40px);
-    max-width: 688px;
+    width: min(800px, calc(100% - 2 * clamp(20px, 4vw, 40px)));
   }
   .bar {
-    height: 60px;
-  }
-  .mainNav,
-  .headerCta {
-    display: none;
+    min-height: 60px;
   }
   .hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 28px;
     padding-block: 28px;
   }
   .heroCopy h1 {
-    font-size: 44px;
-    line-height: 46px;
+    font-size: clamp(36px, 13.75vw, 44px);
+    line-height: 1.0455;
   }
   .heroCopy p {
     font-size: 16px;
@@ -674,7 +667,7 @@
     gap: 8px;
   }
   .evidence {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 28px;
     padding-block: 56px;
   }
@@ -723,7 +716,30 @@
     gap: 20px;
   }
 }
-@media (max-width: 359px) {
+@media (600px <= width < 1024px) {
+  .diagram {
+    height: 384px;
+  }
+  .nodeBox {
+    width: 72px;
+    height: 72px;
+  }
+  .workerNode .nodeBox {
+    width: 88px;
+    height: 88px;
+  }
+  .node .desktopLabel,
+  .play span {
+    display: inline;
+  }
+  .node .mobileLabel {
+    display: none;
+  }
+  .connectorLabel {
+    font-size: 9px;
+  }
+}
+@media (max-width: 379px) {
   .actions {
     gap: 8px;
   }
@@ -751,18 +767,13 @@
   .node > span {
     font-size: 11px;
   }
+  .footer .links {
+    gap: 12px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .landing * {
     scroll-behavior: auto !important;
     transition: none !important;
-  }
-}
-
-@media (min-width: 1024px) {
-  .mainNav {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
   }
 }

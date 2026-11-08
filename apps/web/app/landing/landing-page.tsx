@@ -47,20 +47,9 @@ export default function LandingPage() {
       <header className={styles.header}>
         <div className={`${styles.container} ${styles.bar}`}>
           <Brand />
-          <nav className={styles.mainNav} aria-label="Main">
-            <a href="#product">Product</a>
-            <a href="#setup">Setup</a>
-          </nav>
           <div className={styles.links}>
             <Link href="/?auth=login" prefetch={false}>
               Get Started
-            </Link>
-            <Link
-              className={`${styles.primary} ${styles.headerCta}`}
-              href="/?auth=signup"
-              prefetch={false}
-            >
-              Start monitoring
             </Link>
           </div>
         </div>

@@ -81,7 +81,10 @@ test("public landing works without the API and its CTAs open the existing accoun
     page.getByRole("heading", { name: "Create your account" }),
   ).toBeVisible();
   await page.goBack();
-  await page.getByRole("banner").getByRole("link", { name: "Get Started" }).click();
+  await page
+    .getByRole("banner")
+    .getByRole("link", { name: "Get Started" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();
@@ -118,7 +121,7 @@ test("reduced motion retains instant keyboard step selection", async ({
   );
 });
 
-for (const width of [1440, 390, 320]) {
+for (const width of [280, 320, 360, 390, 768, 1024, 1440]) {
   test(`landing fits at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
     await page.goto("/");
@@ -128,10 +131,10 @@ for (const width of [1440, 390, 320]) {
     });
     await expect(
       demo.getByRole("button", { name: "Recovered", exact: true }),
-    ).toBeInViewport();
+    ).toBeInViewport({ ratio: 1 });
     await expect(
-      page.getByRole("link", { name: "Start monitoring" }).last(),
-    ).toBeInViewport();
+      page.getByRole("link", { name: "Start monitoring" }),
+    ).toBeInViewport({ ratio: 1 });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBe(width);
