@@ -31,7 +31,7 @@ test("Google button starts authorization and fits desktop and mobile", async ({
   await page.route("https://accounts.google.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "Google consent" }),
   );
-  await page.goto("/");
+  await page.goto("/?auth=login");
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeEnabled();
@@ -68,7 +68,7 @@ test("Google button is disabled until credentials are configured", async ({
   page,
 }) => {
   await signedOut(page, false);
-  await page.goto("/");
+  await page.goto("/?auth=login");
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeDisabled();
@@ -88,13 +88,13 @@ test("Google callback errors and MFA challenges are displayed and removed from t
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "Contact your administrator",
   );
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/?auth=login");
   await page.goto("about:blank");
   await page.goto("/#google_challenge=one-time-google-challenge");
   await expect(
     page.getByRole("heading", { name: "Verify your sign-in" }),
   ).toBeVisible();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/?auth=login");
   await page.route("**/api/v1/auth/verify", (route) => {
     expect(route.request().postDataJSON()).toEqual({
       challenge: "one-time-google-challenge",

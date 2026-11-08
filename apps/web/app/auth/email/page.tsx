@@ -84,7 +84,7 @@ export default function EmailLink() {
               <p>Opening link…</p>
             )}
             <div className="auth-actions">
-              <Link href="/">Back to log in</Link>
+              <Link href="/?auth=login">Back to log in</Link>
             </div>
           </>
         )}
@@ -191,7 +191,10 @@ function EmailLinkForm({ link }: { link: EmailAction }) {
                 Request a new link
               </Link>
             )}
-            <Link href="/" className={done ? "auth-login-link" : undefined}>
+            <Link
+              href="/?auth=login"
+              className={done ? "auth-login-link" : undefined}
+            >
               {done ? "Log in" : "Back to log in"}
             </Link>
           </>

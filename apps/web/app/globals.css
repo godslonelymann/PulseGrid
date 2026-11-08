@@ -777,7 +777,7 @@ tr:last-child td {
   flex-shrink: 0;
   padding-inline: var(--page-gutter);
 }
-.site-content:has(.login, .email-link) + .page-footer {
+.site-content:has(.login, .email-link, [data-landing]) + .page-footer {
   display: none;
 }
 .site-content:has(.app-shell) + .page-footer {

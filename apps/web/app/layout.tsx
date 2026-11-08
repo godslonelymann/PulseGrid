@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { Activity } from "lucide-react";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "PulseGrid · Service monitoring",
-  description: "Know how your services are doing.",
+  title: "PulseGrid · Self-hosted uptime monitoring",
+  description:
+    "Monitor websites and HTTP APIs from your own server. Track response times and get outage and recovery alerts.",
 };
 export default function RootLayout({
   children,

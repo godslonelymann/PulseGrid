@@ -20,7 +20,7 @@ test("login offers email and Google without polling while signed out", async ({
   page.on("request", (request) => {
     if (request.url().endsWith("/api/v1/me")) checks++;
   });
-  await page.goto("/");
+  await page.goto("/?auth=login");
   await expect(
     page.getByRole("heading", { name: "Welcome to PulseGrid." }),
   ).toBeVisible();
@@ -58,7 +58,7 @@ test("signup requests a link, resends it, and handles a used link opened in the 
     }),
   );
 
-  await page.goto("/");
+  await page.goto("/?auth=login");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   await page.getByLabel("Email", { exact: true }).fill(email);

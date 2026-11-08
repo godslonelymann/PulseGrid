@@ -7,7 +7,7 @@ export async function operatorSession(
   email: string,
   password: string,
 ) {
-  await page.goto("/");
+  await page.goto("/?auth=login");
   await page
     .getByRole("heading", { name: "Welcome to PulseGrid." })
     .waitFor({ state: "visible" });
