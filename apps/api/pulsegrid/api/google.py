@@ -22,11 +22,13 @@ from pulsegrid.api.email_auth import mail_enabled, require_mail, send_link
 from pulsegrid.api.schemas import Reauth
 from pulsegrid.auth.google_migration import approval_value, migrate_password_account
 from pulsegrid.auth.security import (
+    GOOGLE_REAUTH_SECONDS,
     audit,
     cfg,
     challenge,
     csrf,
     digest,
+    google_reauth_key,
     issue,
     principal,
     rate,
@@ -88,6 +90,17 @@ async def start_link(
     )
     await session.commit()
     return transaction
+
+
+@router.post("/reauth")
+async def start_reauth(request: Request, response: Response, auth=Depends(principal)):
+    # Google-only accounts have no password. A fresh Google sign-in unlocks security settings for a short time.
+    await limit_start(request)
+    user, family = auth
+    if not user.google_sub or user.password_hash:
+        raise HTTPException(409, "Use your password to confirm this change")
+    await rate(f"google-reauth:{user.id}", 5, 900)
+    return await authorization(response, action="reauth", session_id=str(family.id))
 
 
 @router.post("/add-password")
@@ -212,6 +225,8 @@ async def callback(
             if not await migrate_password_account(session, existing, sub):
                 return result(google_error="email_exists")
             user = existing
+    if not user and not cfg.signups_enabled:
+        return result(google_error="signups_closed")
     if not user:
         try:
             async with session.begin_nested():
@@ -256,6 +271,14 @@ async def finish_link(session, tasks, transaction, sub, email):
         return link_result("expired")
     if user.email != email:
         return link_result("wrong_account")
+
+    if transaction["action"] == "reauth":
+        if user.google_sub != sub or user.password_hash:
+            return link_result("wrong_account")
+        await redis.set(google_reauth_key(sid), "1", ex=GOOGLE_REAUTH_SECONDS)
+        audit(session, user, "google_reauth")
+        await session.commit()
+        return link_result("verified")
 
     if transaction["action"] == "add-password":
         if user.google_sub != sub or user.password_hash:

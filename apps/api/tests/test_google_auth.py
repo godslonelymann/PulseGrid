@@ -380,3 +380,49 @@ async def test_google_user_must_prove_google_and_confirm_mail_before_adding_pass
     ).is_success
     linked = (await client.get("/api/v1/me")).json()
     assert linked["id"] == me["id"] and linked["google_connected"] and linked["password_enabled"]
+
+
+async def test_google_only_account_verifies_with_google_for_mfa_and_password(client, provider):
+    import pyotp
+
+    state = await begin(client, provider)
+    await finish(client, state)
+    me = (await client.get("/api/v1/me")).json()
+    assert not me["google_verified"]
+    client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
+    # Without a fresh Google verification, both security actions stay locked.
+    assert (await client.post("/api/v1/auth/mfa/enroll", json={})).status_code == 401
+    assert (await client.post("/api/v1/auth/password", json={"new_password": "added-password-123"})).status_code == 401
+
+    state = await begin(client, provider, "reauth")
+    provider["claims"]["sub"] = "another-google-account"
+    assert callback_values(await finish(client, state)) == {"google_link": "wrong_account"}
+    assert not (await client.get("/api/v1/me")).json()["google_verified"]
+
+    state = await begin(client, provider, "reauth")
+    assert callback_values(await finish(client, state)) == {"google_link": "verified"}
+    assert (await client.get("/api/v1/me")).json()["google_verified"]
+
+    r = await client.post("/api/v1/auth/mfa/enroll", json={})
+    assert r.status_code == 200, r.text
+    r = await client.post("/api/v1/auth/mfa/confirm", json={"code": pyotp.TOTP(r.json()["secret"]).now()})
+    assert r.status_code == 200, r.text
+    recovery = r.json()["recovery_codes"]
+    assert (await client.get("/api/v1/me")).json()["mfa_enabled"]
+
+    body = {"new_password": "added-password-123"}
+    assert (await client.post("/api/v1/auth/password", json=body)).status_code == 401
+    r = await client.post("/api/v1/auth/password", json={**body, "code": recovery[0]})
+    assert r.status_code == 200, r.text
+    async with Session() as session:
+        user = await session.scalar(select(User))
+        assert user.password_hash and user.email_verified_at and user.google_sub
+        assert await session.scalar(select(func.count()).select_from(Audit).where(Audit.kind == "password_added")) == 1
+
+    # The new password works for email sign-in, and the account keeps its authenticator.
+    await client.get("/api/v1/auth/csrf")
+    client.headers["x-csrf-token"] = client.cookies["pg_csrf"]
+    r = await client.post("/api/v1/auth/login", json={"email": me["email"], "password": body["new_password"]})
+    assert r.status_code == 200 and r.json()["mfa_required"]
+    # A password account confirms changes with its password, not with Google.
+    assert (await client.post("/api/v1/auth/google/reauth")).status_code in (401, 409)

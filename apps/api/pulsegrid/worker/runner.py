@@ -35,6 +35,7 @@ from pulsegrid.worker.probe import SafeTransport, probe, validate_url
 
 cfg = settings()
 EXTERNAL_HEARTBEAT_INTERVAL = 60
+HEARTBEAT_SECONDS = 5
 MAX_CHECK_OVERDUE = timedelta(minutes=2)
 
 
@@ -215,6 +216,42 @@ async def claim_delivery():
         }
 
 
+def alert_email(payload):
+    """Return a plain-text subject and body for an alert email."""
+    kind = payload.get("event_kind", "test")
+    name = payload.get("monitor") or "Your service"
+    if kind == "outage":
+        subject = f"[PulseGrid] {name} is DOWN"
+        lines = [
+            f"{name} is not responding.",
+            "",
+            f"URL:      {payload.get('url', '')}",
+            f"Detected: {payload.get('detected_at', '')}",
+            f"Reason:   {payload.get('reason', '')}",
+            "",
+            "PulseGrid will email you again when the service recovers.",
+        ]
+    elif kind == "recovery":
+        subject = f"[PulseGrid] {name} has recovered"
+        lines = [
+            f"{name} is responding again.",
+            "",
+            f"URL:       {payload.get('url', '')}",
+            f"Recovered: {payload.get('detected_at', '')}",
+        ]
+    else:
+        subject = "[PulseGrid] Test alert"
+        lines = [
+            "This is a test alert from PulseGrid. Email alerts work for your account.",
+            "",
+            f"Sent: {payload.get('time', '')}",
+        ]
+    if payload.get("link"):
+        lines += ["", f"Open the dashboard: {payload['link']}"]
+    lines += ["", "You receive this email because email alerts are on for your PulseGrid account."]
+    return subject, "\n".join(lines) + "\n"
+
+
 async def send_delivery(job):
     async with asyncio.timeout(20):
         if job["kind"] == "webhook":
@@ -235,11 +272,12 @@ async def send_delivery(job):
 
             if not cfg.smtp_host or not cfg.smtp_from:
                 raise ValueError("SMTP is not configured")
+            subject, body = alert_email(job["payload"])
             message = EmailMessage()
             message["From"], message["To"] = cfg.smtp_from, job["destination"]
-            message["Subject"] = f"PulseGrid: {job['payload'].get('event_kind', 'test')}"
+            message["Subject"] = subject
             message["Message-ID"] = f"<{job['id']}@pulsegrid>"
-            message.set_content(json.dumps(job["payload"], indent=2))
+            message.set_content(body)
             await aiosmtplib.send(
                 message,
                 hostname=cfg.smtp_host,
@@ -370,7 +408,7 @@ async def main():
     heartbeat_url = cfg.worker_heartbeat_url.get_secret_value()
     heartbeat_client = httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=5) if heartbeat_url else None
     heartbeat_task = None
-    next_ping = loop.time()
+    next_ping = next_heartbeat = loop.time()
     log("worker_started", worker_id=worker_id, concurrency=cfg.worker_concurrency)
     try:
         while not stop.is_set():
@@ -384,14 +422,17 @@ async def main():
                             execute(job, target_slots[(p.hostname, p.port or (443 if p.scheme == "https" else 80))])
                         )
                     )
-                async with Session.begin() as s:
-                    await s.execute(
-                        insert(Heartbeat)
-                        .values(id=worker_id, seen_at=now(), inflight=len(tasks))
-                        .on_conflict_do_update(
-                            index_elements=[Heartbeat.id], set_={"seen_at": now(), "inflight": len(tasks)}
+                if loop.time() >= next_heartbeat:
+                    # The API marks a worker stale after 15 seconds; write well inside that window.
+                    async with Session.begin() as s:
+                        await s.execute(
+                            insert(Heartbeat)
+                            .values(id=worker_id, seen_at=now(), inflight=len(tasks))
+                            .on_conflict_do_update(
+                                index_elements=[Heartbeat.id], set_={"seen_at": now(), "inflight": len(tasks)}
+                            )
                         )
-                    )
+                    next_heartbeat = loop.time() + HEARTBEAT_SECONDS
                 if (
                     heartbeat_client is not None
                     and loop.time() >= next_ping

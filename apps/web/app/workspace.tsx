@@ -65,6 +65,7 @@ type User = {
   mfa_enabled: boolean;
   password_enabled: boolean;
   google_connected: boolean;
+  google_verified: boolean;
   session_id: string;
 };
 type Monitor = {
@@ -219,7 +220,11 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
-export default function Workspace({ signedOutPage }: { signedOutPage?: ReactNode }) {
+export default function Workspace({
+  signedOutPage,
+}: {
+  signedOutPage?: ReactNode;
+}) {
   return (
     <QueryClientProvider client={queryClient}>
       <Suspense fallback={<div className="loading">Loading PulseGrid…</div>}>
@@ -310,6 +315,8 @@ function Login({ onLogin }: { onLogin: () => void }) {
     failed: "Google sign-in could not be completed. Please try again.",
     email_exists:
       "Sign in with the method you already use for this account. Contact your administrator if your account needs migration.",
+    signups_closed:
+      "New sign-ups are closed on this PulseGrid server. Ask the administrator for access.",
   };
   const [error, setError] = useState(
     googleErrors[callback.get("google_error") || ""] || "",
@@ -2149,6 +2156,9 @@ function Account({
   notice: (s: string) => void;
 }) {
   const client = useQueryClient();
+  // Google-only accounts have no password. They confirm sensitive changes with a fresh Google sign-in.
+  const googleOnly = user.google_connected && !user.password_enabled;
+  const needsGoogle = googleOnly && !user.google_verified;
   const [linkStatus] = useState(() =>
     new URLSearchParams(window.location.hash.slice(1)).get("google_link"),
   );
@@ -2162,6 +2172,8 @@ function Account({
   }, [linkStatus]);
   const linkFeedback: Record<string, string> = {
     connected: "Google is now connected to this account.",
+    verified:
+      "Verified with Google. For the next 10 minutes you can change your security settings.",
     check_email:
       "Check your email to finish adding a password. Open the link in this browser.",
     wrong_account:
@@ -2262,7 +2274,7 @@ function Account({
       {linkStatus && linkFeedback[linkStatus] && (
         <p
           role={
-            ["connected", "check_email"].includes(linkStatus)
+            ["connected", "check_email", "verified"].includes(linkStatus)
               ? "status"
               : "alert"
           }
@@ -2270,34 +2282,40 @@ function Account({
           {linkFeedback[linkStatus]}
         </p>
       )}
-      {user.google_connected && !user.password_enabled && (
+      {googleOnly && (
         <section className="panel settings-panel">
-          <h2>Add a password</h2>
+          <h2>Confirm it’s you</h2>
           <p>
-            Verify your Google sign-in, then confirm your email to add a
-            password.
+            {user.google_verified
+              ? "Verified with Google. You can set up two-factor authentication or a password for the next 10 minutes."
+              : "Your account signs in with Google and has no password. Verify with Google before you change two-factor authentication or set a password."}
           </p>
           <form
             onSubmit={(event) =>
-              void submitSecurity(event, "add-password", async () => {
+              void submitSecurity(event, "google-reauth", async () => {
                 const result = await api<{ authorization_url: string }>(
-                  "/auth/google/add-password",
+                  "/auth/google/reauth",
                   "POST",
                 );
                 window.location.assign(result.authorization_url);
               })
             }
           >
-            {errorFor("add-password") && (
+            {errorFor("google-reauth") && (
               <p className="error" role="alert">
-                {errorFor("add-password")}
+                {errorFor("google-reauth")}
               </p>
             )}
-            <button disabled={securityBusy}>Verify with Google</button>
+            <button
+              className={user.google_verified ? undefined : "primary"}
+              disabled={securityBusy}
+            >
+              {user.google_verified ? "Verify again" : "Verify with Google"}
+            </button>
           </form>
         </section>
       )}
-      {user.password_enabled && (
+      {(user.password_enabled || googleOnly) && (
         <div className="settings-grid">
           <section className="panel settings-panel">
             <ShieldCheck size={26} />
@@ -2324,14 +2342,25 @@ function Account({
                   })
                 }
               >
-                <Field label="Current password" error={errorFor("enroll")}>
-                  <PasswordInput
-                    name="password"
-                    autoComplete="current-password"
-                    required
-                  />
-                </Field>
-                <button className="primary" disabled={securityBusy}>
+                {googleOnly ? (
+                  errorFor("enroll") && (
+                    <p className="error" role="alert">
+                      {errorFor("enroll")}
+                    </p>
+                  )
+                ) : (
+                  <Field label="Current password" error={errorFor("enroll")}>
+                    <PasswordInput
+                      name="password"
+                      autoComplete="current-password"
+                      required
+                    />
+                  </Field>
+                )}
+                <button
+                  className="primary"
+                  disabled={securityBusy || needsGoogle}
+                >
                   Set up authenticator
                 </button>
               </form>
@@ -2400,9 +2429,11 @@ function Account({
             )}
           </section>
           <section className="panel settings-panel">
-            <h2>Change password</h2>
+            <h2>{googleOnly ? "Set a password" : "Change password"}</h2>
             <p>
-              Changing your password revokes all sessions, including this one.
+              {googleOnly
+                ? "Add a password so you can also sign in with your email. This signs you out everywhere, including here."
+                : "Changing your password revokes all sessions, including this one."}
             </p>
             <form
               onSubmit={(event) =>
@@ -2416,13 +2447,15 @@ function Account({
                 })
               }
             >
-              <Field label="Current password">
-                <PasswordInput
-                  name="password"
-                  autoComplete="current-password"
-                  required
-                />
-              </Field>
+              {!googleOnly && (
+                <Field label="Current password">
+                  <PasswordInput
+                    name="password"
+                    autoComplete="current-password"
+                    required
+                  />
+                </Field>
+              )}
               <Field label="New password (12+ characters)">
                 <PasswordInput
                   name="new_password"
@@ -2441,7 +2474,9 @@ function Account({
                   {errorFor("password")}
                 </p>
               )}
-              <button disabled={securityBusy}>Update password</button>
+              <button disabled={securityBusy || needsGoogle}>
+                {googleOnly ? "Set password" : "Update password"}
+              </button>
             </form>
           </section>
         </div>
@@ -2580,13 +2615,21 @@ function Account({
               })
             }
           >
-            <Field label="Current password">
-              <PasswordInput
-                name="password"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
+            {googleOnly ? (
+              needsGoogle && (
+                <p className="hint">
+                  Verify with Google first. Use the button in Confirm it’s you.
+                </p>
+              )
+            ) : (
+              <Field label="Current password">
+                <PasswordInput
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+            )}
             <Field label="Authenticator or unused recovery code">
               <input name="code" autoComplete="one-time-code" required />
             </Field>
@@ -2599,7 +2642,7 @@ function Account({
                 {errorFor(manage)}
               </p>
             )}
-            <button className="primary" disabled={securityBusy}>
+            <button className="primary" disabled={securityBusy || needsGoogle}>
               Confirm
             </button>
           </form>

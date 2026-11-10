@@ -52,6 +52,8 @@ from pulsegrid.auth.security import (
     decrypt,
     digest,
     encrypt,
+    google_only,
+    google_reauth_fresh,
     hash_password,
     issue,
     password_enabled,
@@ -249,6 +251,7 @@ async def me(auth=Depends(principal)):
         "mfa_enabled": bool(user.totp_secret),
         "password_enabled": password_enabled(user),
         "google_connected": bool(user.google_sub),
+        "google_verified": google_only(user) and await google_reauth_fresh(family.id),
         "session_id": family.id,
     }
 
@@ -305,10 +308,14 @@ async def logout(request: Request, response: Response, auth=Depends(principal), 
 @app.post(P + "/auth/password", response_model=ActionOut, response_model_exclude_none=True)
 async def password_change(data: PasswordChange, auth=Depends(principal), session: AsyncSession = Depends(db)):
     user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
-    await reauthenticate(session, user, data.password, data.code)
+    adding = google_only(user)
+    await reauthenticate(session, user, data.password, data.code, session_id=auth[1].id)
     user.password_hash = await hash_password(data.new_password)
+    if adding:
+        # Google verified this address at sign-in, so the new password can sign in at once.
+        user.email_verified_at = user.email_verified_at or now()
     await session.execute(update(LoginSession).where(LoginSession.user_id == user.id).values(revoked_at=now()))
-    audit(session, user, "password_changed")
+    audit(session, user, "password_added" if adding else "password_changed")
     await session.commit()
     return {"ok": True, "detail": "All sessions revoked; sign in again"}
 
@@ -318,7 +325,7 @@ async def enroll(data: Reauth, auth=Depends(principal), session: AsyncSession = 
     user = auth[0]
     if user.totp_secret:
         raise HTTPException(409, "MFA already enabled")
-    await reauthenticate(session, user, data.password, data.code)
+    await reauthenticate(session, user, data.password, data.code, session_id=auth[1].id)
     secret = pyotp.random_base32()
     await redis.set(f"enroll:{auth[1].id}", encrypt(secret), ex=300)
     return {"secret": secret, "uri": pyotp.TOTP(secret).provisioning_uri(user.email, issuer_name="PulseGrid")}
@@ -326,14 +333,18 @@ async def enroll(data: Reauth, auth=Depends(principal), session: AsyncSession = 
 
 @app.post(P + "/auth/mfa/confirm", response_model=CodesOut)
 async def confirm(data: ConfirmMFA, auth=Depends(principal), session: AsyncSession = Depends(db)):
-    if not password_enabled(auth[0]):
+    if not (password_enabled(auth[0]) or google_only(auth[0])):
         raise HTTPException(403, "Password sign-in is unavailable")
     await rate(f"enroll-attempt:{auth[1].id}", 5)
     secret = await redis.get(f"enroll:{auth[1].id}")
     if not secret or not pyotp.TOTP(decrypt(secret)).verify(data.code, valid_window=0):
         raise HTTPException(401, "Invalid or expired enrollment")
     user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
-    if not password_enabled(user) or user.totp_secret or not await redis.getdel(f"enroll:{auth[1].id}"):
+    if (
+        not (password_enabled(user) or google_only(user))
+        or user.totp_secret
+        or not await redis.getdel(f"enroll:{auth[1].id}")
+    ):
         raise HTTPException(409, "Enrollment already used")
     user.totp_secret = secret
     user.last_totp_step = int(now().timestamp()) // 30
@@ -356,7 +367,7 @@ async def manage_mfa(data: Reauth, request: Request, auth=Depends(principal), se
     user = await session.get(User, auth[0].id, populate_existing=True, with_for_update=True)
     if not user.totp_secret:
         raise HTTPException(409, "MFA is not enabled")
-    await reauthenticate(session, user, data.password, data.code)
+    await reauthenticate(session, user, data.password, data.code, session_id=auth[1].id)
     if request.url.path.endswith("disable"):
         user.totp_secret = None
         user.last_totp_step = None

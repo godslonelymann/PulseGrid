@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     # Allows password login for older, operator-provisioned accounts without confirmed email.
     enable_legacy_password_auth: bool = False
+    # False closes new account creation (email and Google). Existing accounts can still sign in.
+    signups_enabled: bool = True
     jwt_secret: str
     encryption_key: str
     secure_cookies: bool = False

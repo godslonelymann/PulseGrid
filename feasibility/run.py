@@ -5,7 +5,6 @@ import os
 import platform
 import secrets
 import socket
-import subprocess
 import sys
 import time
 import traceback

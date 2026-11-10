@@ -128,3 +128,15 @@ async def test_forwarded_ip_is_trusted_only_from_caddy_and_limits_are_separate(m
     ) as direct:
         direct.headers["X-Forwarded-For"] = ip_b
         assert (await post(direct, "/google/start")).status_code == 429
+
+
+async def test_closed_signups_block_new_accounts_and_pending_links(client, inbox, monkeypatch):
+    assert (await post(client, "/email/signup", email=EMAIL)).status_code == 202
+    token = inbox.pop()[1]["token"][0]
+    monkeypatch.setattr(cfg, "signups_enabled", False)
+    # A new request and a link sent before the switch are both refused.
+    assert (await post(client, "/email/signup", email="other@example.com")).status_code == 403
+    assert (await post(client, "/email/confirm", token=token, password=PASSWORD)).status_code == 403
+    assert not inbox
+    async with Session() as session:
+        assert await session.scalar(select(User.id)) is None

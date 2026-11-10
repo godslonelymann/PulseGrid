@@ -18,7 +18,8 @@ class Factor(BaseModel):
 
 
 class Reauth(BaseModel):
-    password: str = Field(min_length=1, max_length=256)
+    # Empty for Google-only accounts, which reauthenticate with a recent Google sign-in.
+    password: str = Field(default="", max_length=256)
     code: str = Field(default="", max_length=64)
 
 
@@ -148,6 +149,7 @@ class MeOut(BaseModel):
     mfa_enabled: bool
     password_enabled: bool
     google_connected: bool
+    google_verified: bool
     session_id: UUID
 
 

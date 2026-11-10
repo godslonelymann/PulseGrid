@@ -10,6 +10,7 @@ PulseGrid is a self-hosted uptime monitor for websites and HTTP APIs. It checks 
 - View current health, uptime, check coverage, response times, and outage history. The dashboard shows when checks are missing or stale.
 - Receive outage and recovery emails at your account address when email alerts are enabled and SMTP is configured. Send a test email from the dashboard or configure webhook alerts through the API. The worker retries failed deliveries and records their outcomes.
 - Sign in with Google or a verified email and password. Manage password recovery, authenticator-based two-factor authentication, and active sessions.
+- Close new sign-ups with `SIGNUPS_ENABLED=false` when the server is for you or your team only. Existing accounts can still sign in.
 
 ## How does it work?
 

@@ -47,6 +47,11 @@ def mail_enabled():
     return bool(cfg.smtp_host.strip() and cfg.smtp_from.strip())
 
 
+def require_signups():
+    if not cfg.signups_enabled:
+        raise HTTPException(403, "New sign-ups are closed on this PulseGrid server")
+
+
 def require_mail():
     if not mail_enabled():
         raise HTTPException(503, "Account email is temporarily unavailable")
@@ -111,6 +116,7 @@ async def request_limit(request, purpose, email):
 async def signup(
     data: Address, request: Request, tasks: BackgroundTasks, session: AsyncSession = Depends(db, scope="function")
 ):
+    require_signups()
     require_mail()
     email = data.email.lower()
     await request_limit(request, "confirm", email)
@@ -121,6 +127,8 @@ async def signup(
 
 @router.post("/confirm")
 async def confirm(data: NewPassword, request: Request, session: AsyncSession = Depends(db)):
+    # Links sent before sign-ups were closed must not create accounts afterwards.
+    require_signups()
     key, claims = await read_link(request, "confirm", data.token)
     uid = await session.scalar(
         insert(User)

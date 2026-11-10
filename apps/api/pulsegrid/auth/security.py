@@ -43,6 +43,21 @@ def password_enabled(user):
     return bool(user.password_hash and (user.email_verified_at or cfg.enable_legacy_password_auth))
 
 
+GOOGLE_REAUTH_SECONDS = 600
+
+
+def google_only(user):
+    return bool(user.google_sub and not user.password_hash)
+
+
+def google_reauth_key(session_id):
+    return f"google-reauth:{session_id}"
+
+
+async def google_reauth_fresh(session_id):
+    return bool(session_id and await redis.exists(google_reauth_key(session_id)))
+
+
 async def hash_password(password):
     async with password_slots:
         return await asyncio.to_thread(hasher.hash, password)
@@ -162,11 +177,17 @@ async def verify_factor(session, user, code):
     return used.scalar_one_or_none() is not None
 
 
-async def reauthenticate(session, user, password, code, *, failure_status=401):
+async def reauthenticate(session, user, password, code, *, failure_status=401, session_id=None):
     if user.password_hash and not password_enabled(user):
         raise HTTPException(403, "Password sign-in is disabled for this legacy account")
     await rate(f"reauth:{user.id}")
-    if not await password_ok(password, user.password_hash) or not await verify_factor(session, user, code):
+    if google_only(user):
+        # A Google-only account has no password, so a recent Google sign-in from this session proves identity.
+        if not await google_reauth_fresh(session_id):
+            raise HTTPException(failure_status, "Verify with Google again to continue")
+    elif not await password_ok(password, user.password_hash):
+        raise HTTPException(failure_status, "Reauthentication failed")
+    if not await verify_factor(session, user, code):
         raise HTTPException(failure_status, "Reauthentication failed")
 
 

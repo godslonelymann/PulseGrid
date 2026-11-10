@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -36,7 +37,9 @@ def binary(name):
 
 
 def run(*args, **kwargs):
-    return subprocess.run(args, check=True, **kwargs)
+    # PostgreSQL on macOS refuses to start ("postmaster became multithreaded") without a valid locale.
+    env = {**os.environ, "LC_ALL": os.environ.get("LC_ALL") or "C"}
+    return subprocess.run(args, check=True, env=env, **kwargs)
 
 
 def free_port(port):
